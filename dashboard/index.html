@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tỷ giá 9 ngân hàng — Big 4 + 5 NHTMCP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #101828;
+    --ink-soft: #475467;
+    --paper: #EEF1F6;
+    --paper-raised: #FFFFFF;
+    --line: #D7DCE5;
+    --accent: #0F6E5D;
+    --accent-soft: #E3F1EC;
+    --up: #0F6E5D;
+    --down: #B3261E;
+    --amber: #B7791F;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--ink-soft); font-size: 14px; margin: 0; }
+  .meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .updated-at {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .btn-refresh {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.15s ease;
+  }
+  .btn-refresh:hover { background: #0C5A4C; }
+  .btn-refresh:disabled { background: #9AA4B2; cursor: default; }
+  .btn-refresh svg { width: 14px; height: 14px; }
+  .spin { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status-line {
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .status-line.show { display: block; }
+  .status-line.ok { background: var(--accent-soft); color: var(--accent); }
+  .status-line.warn { background: #FBF0DC; color: var(--amber); }
+  .status-line.err { background: #FBE7E5; color: var(--down); }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: none;
+    border: none;
+    padding: 10px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11.5px;
+    text-transform: none;
+    color: var(--ink-soft);
+    font-weight: 600;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  thead th.num { text-align: right; }
+  tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #EEF0F3;
+    font-size: 14px;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td.num {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .bank-name { font-weight: 600; }
+  .best { color: var(--up); font-weight: 600; }
+  .best::after { content: " ▲"; font-size: 10px; }
+  .worst { color: var(--down); }
+  .na { color: #B0B7C2; }
+
+  footer {
+    margin-top: 22px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+  }
+
+  @media (max-width: 640px) {
+    thead th, tbody td { padding: 10px 10px; font-size: 13px; }
+    h1 { font-size: 19px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Tỷ giá 9 ngân hàng</h1>
+      <p class="subtitle">Big 4 (Vietcombank · BIDV · VietinBank · Agribank) + 5 NHTMCP (Techcombank · Eximbank · TPBank · ACB · MB)</p>
+    </div>
+    <div class="meta-row">
+      <span class="updated-at" id="updatedAt">—</span>
+      <button class="btn-refresh" id="refreshBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
+        Cập nhật ngay
+      </button>
+    </div>
+  </header>
+
+  <div class="status-line" id="statusLine"></div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-cur="USD">USD</button>
+    <button class="tab" data-cur="EUR">EUR</button>
+    <button class="tab" data-cur="JPY">JPY</button>
+    <button class="tab" data-cur="THB">THB</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Ngân hàng</th>
+          <th class="num">Mua tiền mặt</th>
+          <th class="num">Mua chuyển khoản</th>
+          <th class="num">Bán</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="4" style="padding:28px 16px; color:var(--ink-soft);">Đang tải dữ liệu…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Dữ liệu tự động cào từ website chính thức từng ngân hàng, cập nhật theo lịch hàng ngày.
+    Chỉ mang tính tham khảo nội bộ — vui lòng đối chiếu lại trước khi dùng cho giao dịch chính thức.
+  </footer>
+
+</div>
+
+<!-- Firebase compat SDK (đơn giản, không cần build step) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<script>
+  // ⚠️ Đoạn config này lấy từ Firebase Console — không phải bí mật, dùng công
+  // khai phía trình duyệt là bình thường (Firebase bảo mật bằng Rules, không
+  // phải bằng việc giấu apiKey).
+  const firebaseConfig = {
+    apiKey: "AIzaSyBewhUUCFMT3a0o1V_Wwf10U9zwH-kXM5E",
+    authDomain: "tonghoptygia.firebaseapp.com",
+    databaseURL: "https://tonghoptygia-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tonghoptygia",
+    storageBucket: "tonghoptygia.firebasestorage.app",
+    messagingSenderId: "221466930360",
+    appId: "1:221466930360:web:10d3280e243ade104b184d"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  const BANK_ORDER = ["VCB", "BIDV", "VTB", "AGR", "TCB", "EIB", "TPB", "ACB", "MB"];
+  let currentCurrency = "USD";
+  let latestData = null;
+
+  const fmt = (n) => n === null || n === undefined
+    ? '<span class="na">—</span>'
+    : n.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+
+  function render() {
+    const tbody = document.getElementById("tbody");
+    if (!latestData || !latestData.banks) {
+      tbody.innerHTML = '<tr><td colspan="4" style="padding:28px 16px; color:var(--ink-soft);">Chưa có dữ liệu.</td></tr>';
+      return;
+    }
+
+    const rows = BANK_ORDER
+      .map((code) => ({ code, bank: latestData.banks[code] }))
+      .filter((r) => r.bank && r.bank.rates && r.bank.rates[currentCurrency]);
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="padding:28px 16px; color:var(--ink-soft);">Chưa có dữ liệu cho ' + currentCurrency + '.</td></tr>';
+      return;
+    }
+
+    const muaCkVals = rows.map((r) => r.bank.rates[currentCurrency].muaCk).filter((v) => v != null);
+    const banVals = rows.map((r) => r.bank.rates[currentCurrency].ban).filter((v) => v != null);
+    const maxMuaCk = Math.max(...muaCkVals);
+    const minBan = Math.min(...banVals);
+
+    tbody.innerHTML = rows.map(({ code, bank }) => {
+      const r = bank.rates[currentCurrency];
+      const muaCkClass = r.muaCk === maxMuaCk ? "best" : "";
+      const banClass = r.ban === minBan ? "best" : "";
+      return `<tr>
+        <td class="bank-name">${bank.name}</td>
+        <td class="num">${fmt(r.muaTm)}</td>
+        <td class="num ${muaCkClass}">${fmt(r.muaCk)}</td>
+        <td class="num ${banClass}">${fmt(r.ban)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderStatus() {
+    const el = document.getElementById("statusLine");
+    if (!latestData) return;
+    if (latestData.partial && latestData.errors && latestData.errors.length) {
+      el.className = "status-line show warn";
+      el.textContent = `Thiếu dữ liệu ${latestData.errors.length} ngân hàng (${latestData.errors.map(e => e.bank).join(", ")}) — các ngân hàng khác vẫn cập nhật bình thường.`;
+    } else {
+      el.className = "status-line show ok";
+      el.textContent = "Tất cả 9 ngân hàng đã cập nhật thành công.";
+      setTimeout(() => el.classList.remove("show"), 4000);
+    }
+  }
+
+  function renderUpdatedAt() {
+    const el = document.getElementById("updatedAt");
+    if (!latestData || !latestData.updatedAt) { el.textContent = "—"; return; }
+    const d = new Date(latestData.updatedAt);
+    el.textContent = "Cập nhật lúc " + d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  }
+
+  db.ref("latest").on("value", (snap) => {
+    latestData = snap.val();
+    render();
+    renderStatus();
+    renderUpdatedAt();
+  });
+
+  document.getElementById("tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab");
+    if (!btn) return;
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    btn.classList.add("active");
+    currentCurrency = btn.dataset.cur;
+    render();
+  });
+
+  document.getElementById("refreshBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("refreshBtn");
+    const el = document.getElementById("statusLine");
+    btn.disabled = true;
+    btn.querySelector("svg").classList.add("spin");
+    el.className = "status-line show ok";
+    el.textContent = "Đang gửi yêu cầu cập nhật…";
+
+    try {
+      const res = await fetch("/api/trigger-update", { method: "POST" });
+      const data = await res.json();
+      el.className = "status-line show " + (data.ok ? "ok" : "err");
+      el.textContent = data.message;
+    } catch (err) {
+      el.className = "status-line show err";
+      el.textContent = "Không gửi được yêu cầu — kiểm tra kết nối mạng.";
+    } finally {
+      btn.disabled = false;
+      btn.querySelector("svg").classList.remove("spin");
+    }
+  });
+</script>
+</body>
+</html>
