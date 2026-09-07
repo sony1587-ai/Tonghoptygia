@@ -50,7 +50,7 @@ function initFirebase() {
 // ---------------------------------------------------------------------------
 // 2. Vietcombank — nguồn XML tĩnh chính thức, không cần trình duyệt
 // ---------------------------------------------------------------------------
-const VCB_XML_URL = "https://www.vietcombank.com.vn/exchangerates/ExrateXML.aspx";
+const VCB_XML_URL = "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx";
 
 function toNumberVCB(str) {
   if (str === undefined || str === null || str === "") return null;
@@ -107,12 +107,12 @@ async function scrapeVietcombank() {
 // ---------------------------------------------------------------------------
 const BANKS = [
   { bankCode: "BIDV", bankName: "BIDV", url: "https://bidv.com.vn/vn/ty-gia-ngoai-te", waitForText: "Mua tiền mặt", waitMs: 4000 },
-  { bankCode: "VTB", bankName: "VietinBank", url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn", waitForText: "USD", waitMs: 4000 },
+  { bankCode: "VTB", bankName: "VietinBank", url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn", waitForText: "USD", waitMs: 9000 },
   { bankCode: "AGR", bankName: "Agribank", url: "https://www.agribank.com.vn/vn/ty-gia", waitForText: "USD", waitMs: 3000 },
   { bankCode: "TCB", bankName: "Techcombank", url: "https://techcombank.com/cong-cu-tien-ich/ty-gia", waitForText: "USD", waitMs: 4000 },
   { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 3000 },
   { bankCode: "TPB", bankName: "TPBank", url: "https://tpb.vn/cong-cu-tinh-toan/ty-gia-ngoai-te", waitForText: "USD", waitMs: 4000 },
-  { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/exchange-rate", waitForText: "USD", waitMs: 4000 },
+  { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/exchange-rate", waitForText: "USD", waitMs: 9000 },
   { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "USD", waitMs: 4000 },
 ];
 
@@ -129,20 +129,31 @@ function parseBodyText(bodyText, numbersPerRow) {
 
   for (const code of WANTED) {
     const codeRegex = new RegExp(`\\b${code}\\b`);
-    const lineIdx = lines.findIndex((l) => codeRegex.test(l));
-    if (lineIdx === -1) {
+    // Có thể mã tiền tệ xuất hiện nhiều chỗ (ô chọn ngoại tệ, danh sách carousel...)
+    // — thử LẦN LƯỢT từng chỗ, chọn chỗ đầu tiên có đủ số hợp lệ đi kèm.
+    const candidateIdxs = lines.map((l, i) => (codeRegex.test(l) ? i : -1)).filter((i) => i !== -1);
+
+    if (candidateIdxs.length === 0) {
       diagnostics.push(`${code}: không tìm thấy dòng nào chứa mã này trên trang`);
       continue;
     }
 
-    const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
-    const numberMatches = windowText.match(/[\d]{1,3}(?:[.,]\d{2,3})+|\d+[.,]\d+/g) || [];
-    const nums = numberMatches.map(toNumberGeneric).filter((n) => n !== null && n > 0);
+    let found = false;
+    for (const lineIdx of candidateIdxs) {
+      const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
+      const numberMatches = windowText.match(/[\d]{1,3}(?:[.,]\d{2,3})+|\d+[.,]\d+/g) || [];
+      const nums = numberMatches.map(toNumberGeneric).filter((n) => n !== null && n > 0);
 
-    if (nums.length >= numbersPerRow) {
-      result[code] = { muaTm: nums[0] ?? null, muaCk: nums[1] ?? null, ban: nums[2] ?? null, banCk: nums[3] ?? null };
-    } else {
-      diagnostics.push(`${code}: thấy dòng "${lines[lineIdx].slice(0, 60)}" nhưng chỉ trích được ${nums.length} số (cần ${numbersPerRow}) — đoạn quét: "${windowText.slice(0, 150)}"`);
+      if (nums.length >= numbersPerRow) {
+        result[code] = { muaTm: nums[0] ?? null, muaCk: nums[1] ?? null, ban: nums[2] ?? null, banCk: nums[3] ?? null };
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      const firstWindow = lines.slice(candidateIdxs[0], candidateIdxs[0] + 8).join(" ");
+      diagnostics.push(`${code}: thấy mã ở ${candidateIdxs.length} chỗ nhưng không chỗ nào đủ số — ví dụ: "${firstWindow.slice(0, 150)}"`);
     }
   }
   return { result, diagnostics };
@@ -172,7 +183,8 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
 
     await new Promise((r) => setTimeout(r, waitMs));
     const bodyText = await page.evaluate(() => document.body.innerText);
-    return { ...parseBodyText(bodyText, numbersPerRow), bodyLength: bodyText.length };
+    const parsed = parseBodyText(bodyText, numbersPerRow);
+    return { ...parsed, bodyLength: bodyText.length, rawSnippet: bodyText.length < 500 ? bodyText : null };
   } finally {
     await browser.close();
   }
@@ -207,12 +219,13 @@ async function run() {
   for (const bank of BANKS) {
     console.log(`Bắt đầu: ${bank.bankName}`);
     try {
-      const { result: rates, diagnostics, bodyLength } = await withTimeout(scrapeGenericBankTable(bank), 40000, bank.bankName);
+      const { result: rates, diagnostics, bodyLength, rawSnippet } = await withTimeout(scrapeGenericBankTable(bank), 55000, bank.bankName);
       const gotAll = WANTED.every((c) => rates[c]);
       if (!gotAll) {
+        const shortPageNote = rawSnippet ? ` | Toàn bộ nội dung trang (nghi bị chặn bot hoặc bảng nằm trong iframe): "${rawSnippet}"` : "";
         throw new Error(
           `chỉ lấy được ${Object.keys(rates).join(", ") || "không có"} (trang tải ${bodyLength} ký tự) — ` +
-          diagnostics.join(" || ")
+          diagnostics.join(" || ") + shortPageNote
         );
       }
       results[bank.bankCode] = { name: bank.bankName, rates };
