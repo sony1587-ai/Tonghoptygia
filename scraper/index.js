@@ -1,4 +1,3 @@
-
 // ============================================================================
 // scraper/index.js — TOÀN BỘ logic cào tỷ giá 9 ngân hàng + ghi Firebase,
 // gộp vào 1 file duy nhất (để dễ tạo thủ công trên GitHub qua điện thoại).
@@ -10,6 +9,17 @@ const xml2js = require("xml2js");
 const puppeteer = require("puppeteer");
 
 const WANTED = ["USD", "EUR", "JPY", "THB"];
+
+// Đảm bảo KHÔNG bước nào có thể treo vô thời hạn — nếu quá `ms`, tự huỷ và
+// báo lỗi rõ ràng thay vì làm nghẽn toàn bộ kịch bản.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label}: quá thời gian chờ (${ms / 1000}s)`)), ms)
+    ),
+  ]);
+}
 
 // ---------------------------------------------------------------------------
 // 1. Khởi tạo Firebase Admin SDK
@@ -50,12 +60,24 @@ function toNumberVCB(str) {
 
 async function scrapeVietcombank() {
   const res = await fetch(VCB_XML_URL, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; tygia-bigbanks-bot/1.0)" },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "Accept": "text/xml,application/xml,*/*",
+      "Referer": "https://www.vietcombank.com.vn/",
+    },
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`Vietcombank XML fetch thất bại: HTTP ${res.status}`);
   const xml = await res.text();
 
-  const parsed = await xml2js.parseStringPromise(xml);
+  let parsed;
+  try {
+    parsed = await xml2js.parseStringPromise(xml);
+  } catch (parseErr) {
+    // In ra 300 ký tự đầu của phản hồi thực tế để chẩn đoán (có thể là trang
+    // chặn bot thay vì XML thật) — sẽ hiện trong log GitHub Actions.
+    throw new Error(`${parseErr.message} | Phản hồi thực nhận (300 ký tự đầu): ${xml.slice(0, 300)}`);
+  }
   const rows = parsed?.ExrateList?.Exrate || [];
 
   const result = {};
@@ -103,11 +125,15 @@ function toNumberGeneric(str) {
 function parseBodyText(bodyText, numbersPerRow) {
   const lines = bodyText.split("\n").map((l) => l.trim()).filter(Boolean);
   const result = {};
+  const diagnostics = [];
 
   for (const code of WANTED) {
     const codeRegex = new RegExp(`\\b${code}\\b`);
     const lineIdx = lines.findIndex((l) => codeRegex.test(l));
-    if (lineIdx === -1) continue;
+    if (lineIdx === -1) {
+      diagnostics.push(`${code}: không tìm thấy dòng nào chứa mã này trên trang`);
+      continue;
+    }
 
     const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
     const numberMatches = windowText.match(/[\d]{1,3}(?:[.,]\d{2,3})+|\d+[.,]\d+/g) || [];
@@ -115,9 +141,11 @@ function parseBodyText(bodyText, numbersPerRow) {
 
     if (nums.length >= numbersPerRow) {
       result[code] = { muaTm: nums[0] ?? null, muaCk: nums[1] ?? null, ban: nums[2] ?? null, banCk: nums[3] ?? null };
+    } else {
+      diagnostics.push(`${code}: thấy dòng "${lines[lineIdx].slice(0, 60)}" nhưng chỉ trích được ${nums.length} số (cần ${numbersPerRow}) — đoạn quét: "${windowText.slice(0, 150)}"`);
     }
   }
-  return result;
+  return { result, diagnostics };
 }
 
 async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000, numbersPerRow = 3 }) {
@@ -144,7 +172,7 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
 
     await new Promise((r) => setTimeout(r, waitMs));
     const bodyText = await page.evaluate(() => document.body.innerText);
-    return parseBodyText(bodyText, numbersPerRow);
+    return { ...parseBodyText(bodyText, numbersPerRow), bodyLength: bodyText.length };
   } finally {
     await browser.close();
   }
@@ -167,8 +195,9 @@ async function run() {
   const results = {};
   const errors = [];
 
+  console.log("Bắt đầu: Vietcombank");
   try {
-    results.VCB = { name: "Vietcombank", rates: await scrapeVietcombank() };
+    results.VCB = { name: "Vietcombank", rates: await withTimeout(scrapeVietcombank(), 20000, "Vietcombank") };
     console.log("✅ Vietcombank: OK");
   } catch (err) {
     errors.push({ bank: "Vietcombank", error: err.message });
@@ -176,11 +205,15 @@ async function run() {
   }
 
   for (const bank of BANKS) {
+    console.log(`Bắt đầu: ${bank.bankName}`);
     try {
-      const rates = await scrapeGenericBankTable(bank);
+      const { result: rates, diagnostics, bodyLength } = await withTimeout(scrapeGenericBankTable(bank), 40000, bank.bankName);
       const gotAll = WANTED.every((c) => rates[c]);
       if (!gotAll) {
-        throw new Error(`chỉ lấy được ${Object.keys(rates).join(", ") || "không có"} — cần hiệu chỉnh waitForText`);
+        throw new Error(
+          `chỉ lấy được ${Object.keys(rates).join(", ") || "không có"} (trang tải ${bodyLength} ký tự) — ` +
+          diagnostics.join(" || ")
+        );
       }
       results[bank.bankCode] = { name: bank.bankName, rates };
       console.log(`✅ ${bank.bankName}: OK`);
