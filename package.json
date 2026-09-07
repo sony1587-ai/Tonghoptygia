@@ -1,0 +1,15 @@
+{
+  "name": "tygia-bigbanks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tự động cào tỷ giá 9 ngân hàng (Big 4 + 5 NHTMCP) và ghi vào Firebase Realtime Database",
+  "type": "commonjs",
+  "scripts": {
+    "scrape": "node scraper/index.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "puppeteer": "^23.6.0",
+    "xml2js": "^0.6.2"
+  }
+}
