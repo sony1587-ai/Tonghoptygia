@@ -1,0 +1,8 @@
+[build]
+  publish = "dashboard"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/trigger-update"
+  to = "/.netlify/functions/trigger-update"
+  status = 200
