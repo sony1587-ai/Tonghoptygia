@@ -2,8 +2,11 @@ name: Cập nhật tỷ giá hàng ngày
 
 on:
   schedule:
+    # 01:00 UTC = 08:00 giờ Việt Nam, mỗi ngày
     - cron: "0 1 * * *"
   workflow_dispatch: {}
+    # ↑ Cho phép chạy thủ công: từ tab "Actions" trên GitHub (nút "Run workflow"),
+    # hoặc được gọi từ nút "Cập nhật ngay" trên dashboard qua Netlify Function.
 
 jobs:
   scrape-and-update:
@@ -17,7 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
       - name: Cài các thư viện hệ thống cho Chromium (Puppeteer)
         run: |
@@ -29,7 +31,7 @@ jobs:
             libx11-6 libx11-xcb1 libxcb1 libxext6 libxi6 libxtst6 fonts-liberation
 
       - name: Cài dependencies npm (kèm tải Chromium cho Puppeteer)
-        run: npm ci
+        run: npm install
 
       - name: Chạy scraper và ghi vào Firebase
         env:
