@@ -1,3 +1,4 @@
+
 // ============================================================================
 // scraper/index.js — TOÀN BỘ logic cào tỷ giá 9 ngân hàng + ghi Firebase,
 // gộp vào 1 file duy nhất (để dễ tạo thủ công trên GitHub qua điện thoại).
@@ -129,12 +130,12 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     );
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 25000 });
 
     try {
       await page.waitForFunction(
         (text) => document.body && document.body.innerText.includes(text),
-        { timeout: 20000 },
+        { timeout: 10000 },
         waitForText
       );
     } catch {
