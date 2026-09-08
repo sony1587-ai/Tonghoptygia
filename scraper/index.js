@@ -122,9 +122,13 @@ async function scrapeViaVnappmob(apiCode, apiKey) {
       banCk: null,
     };
   }
-  if (Object.keys(result).length === 0) {
-    throw new Error(`API ${apiCode} không trả về loại tiền nào trong ${WANTED.join(", ")}`);
+    if (Object.keys(result).length === 0) {
+    throw new Error(
+      `API ${apiCode} không trả về loại tiền nào trong ${WANTED.join(", ")} — ` +
+      `phản hồi thô (400 ký tự đầu): ${JSON.stringify(data).slice(0, 400)}`
+    );
   }
+
   return result;
 }
 
