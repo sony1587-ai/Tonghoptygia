@@ -2,6 +2,11 @@
   publish = "dashboard"
   functions = "netlify/functions"
 
+# Netlify chỉ chạy phần web + 2 function nhỏ, không cần trình duyệt Chromium
+# (thứ chỉ dùng khi cào dữ liệu trên GitHub Actions) — bỏ tải cho nhẹ và nhanh.
+[build.environment]
+  PUPPETEER_SKIP_DOWNLOAD = "true"
+
 [[redirects]]
   from = "/api/trigger-update"
   to = "/.netlify/functions/trigger-update"
