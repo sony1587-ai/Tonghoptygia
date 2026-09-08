@@ -7,7 +7,7 @@ const admin = require("firebase-admin");
 const xml2js = require("xml2js");
 const puppeteer = require("puppeteer");
 
-const WANTED = ["USD", "EUR", "JPY", "THB"];
+const WANTED = ["USD", "EUR", "JPY", "THB", "GBP", "AUD"];
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -359,7 +359,7 @@ async function run() {
     if (WANTED.some((c) => !rates[c])) {
       try {
         const { result, diagnostics, bodyLength, rawSnippet } =
-          await withTimeout(scrapeGenericBankTable(bank), 65000, bank.bankName);
+          await withTimeout(scrapeGenericBankTable(bank), 80000, bank.bankName);
         for (const code of WANTED) {
           if (!rates[code] && result[code]) rates[code] = result[code];
         }
