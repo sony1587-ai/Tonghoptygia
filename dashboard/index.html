@@ -195,12 +195,58 @@
     white-space: nowrap;
   }
   .val.none { color: #C3CAD5; font-weight: 400; }
-  .val.top { color: var(--good); font-weight: 600; }
+  .val.top {
+    color: #08553F;
+    font-weight: 700;
+    background: var(--good-tint);
+    border-radius: 5px;
+    padding: 3px 6px;
+    margin: -3px -2px;
+  }
   .val.top::after {
     content: "▲";
     font-size: 8px;
     margin-left: 3px;
     vertical-align: 2px;
+  }
+
+  .getlink {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--brand);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+  .getlink:hover { background: var(--brand-tint); border-color: var(--brand); }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .toolbar label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .toolbar select {
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 13px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .toolbar select:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-tint);
   }
 
   .legend {
@@ -370,10 +416,23 @@
 
   <div class="picker" id="picker" role="tablist" aria-label="Chọn ngoại tệ"></div>
 
+  <div class="toolbar">
+    <label for="sortBy">Sắp xếp</label>
+    <select id="sortBy">
+      <option value="default">Theo thứ tự ngân hàng</option>
+      <option value="muaCk-desc">Mua chuyển khoản: cao → thấp</option>
+      <option value="muaCk-asc">Mua chuyển khoản: thấp → cao</option>
+      <option value="ban-asc">Bán ra: thấp → cao</option>
+      <option value="ban-desc">Bán ra: cao → thấp</option>
+      <option value="muaTm-desc">Mua tiền mặt: cao → thấp</option>
+    </select>
+  </div>
+
   <div class="board" id="board"></div>
 
   <p class="legend">
-    <span class="sw">▲</span> đánh dấu ngân hàng mua chuyển khoản cao nhất và bán ra thấp nhất trong ngày.
+    Ô <span class="sw">tô xanh ▲</span> là mua chuyển khoản cao nhất và bán ra thấp nhất trong ngày.
+    Ngân hàng chưa có số bấm "lấy số" để mở trang tỷ giá và nhập vào.
   </p>
 
   <section class="entry" id="entry">
@@ -459,6 +518,7 @@
   BANKS.forEach((b) => { BANK_BY_CODE[b.code] = b; });
 
   let currency = "USD";
+  let sortBy = "default";
   let data = null;
 
   const el = (id) => document.getElementById(id);
@@ -483,26 +543,40 @@
   function drawBoard() {
     const banks = (data && data.banks) || {};
 
-    const present = BANKS
-      .map((b) => (banks[b.code] && banks[b.code].rates && banks[b.code].rates[currency]) || null)
-      .filter(Boolean);
+    const rowsData = BANKS.map((b) => ({
+      bank: b,
+      r: (banks[b.code] && banks[b.code].rates && banks[b.code].rates[currency]) || null,
+    }));
 
+    const present = rowsData.map((x) => x.r).filter(Boolean);
     const ckVals  = present.map((r) => r.muaCk).filter((v) => v != null);
     const banVals = present.map((r) => r.ban).filter((v) => v != null);
     const bestCk  = ckVals.length  ? Math.max(...ckVals)  : null;
     const bestBan = banVals.length ? Math.min(...banVals) : null;
 
+    // Hàng chưa có số liệu luôn dồn xuống cuối vì không so sánh được.
+    if (sortBy !== "default") {
+      const [field, dir] = sortBy.split("-");
+      rowsData.sort((a, b) => {
+        const va = a.r && a.r[field];
+        const vb = b.r && b.r[field];
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        return dir === "asc" ? va - vb : vb - va;
+      });
+    }
+
     const head = '<div class="row head">' +
       '<span>Ngân hàng</span><span>Mua tiền mặt</span><span>Mua chuyển khoản</span><span>Bán</span>' +
       '</div>';
 
-    const rows = BANKS.map((b) => {
-      const bank = banks[b.code];
-      const r = bank && bank.rates && bank.rates[currency];
-
+    const rows = rowsData.map(({ bank: b, r }) => {
       if (!r) {
         return '<div class="row empty">' +
-          `<span class="bank">${b.name}</span>` +
+          `<span class="bank">${b.name}` +
+          `<a class="getlink" href="${b.url}" target="_blank" rel="noopener" data-fill="${b.code}">lấy số ↗</a>` +
+          `</span>` +
           '<span class="val none">—</span><span class="val none">—</span><span class="val none">—</span>' +
           '</div>';
       }
@@ -553,6 +627,24 @@
       say("ok", "Tất cả ngân hàng đã có số liệu.", true);
     }
   }
+
+  el("sortBy").addEventListener("change", (e) => {
+    sortBy = e.target.value;
+    drawBoard();
+  });
+
+  // Bấm "lấy số": mở trang ngân hàng ở tab mới, đồng thời mở sẵn ô nhập tay
+  // đã chọn đúng ngân hàng đó.
+  el("board").addEventListener("click", (e) => {
+    const link = e.target.closest(".getlink");
+    if (!link) return;
+    const code = link.dataset.fill;
+    el("manualBank").value = code;
+    syncLink();
+    el("entry").classList.add("open");
+    el("entryToggle").setAttribute("aria-expanded", "true");
+    el("entry").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   db.ref("latest").on("value", (snap) => {
     data = snap.val();
