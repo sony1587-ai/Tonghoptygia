@@ -110,7 +110,7 @@ const BANKS = [
   { bankCode: "TCB", bankName: "Techcombank", url: "https://techcombank.com/cong-cu-tien-ich/ty-gia", waitForText: "USD", waitMs: 4000 },
   { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 3000 },
   { bankCode: "TPB", bankName: "TPBank", url: "https://tpb.vn/cong-cu-tinh-toan/ty-gia-ngoai-te", waitForText: "USD", waitMs: 4000 },
-  { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/exchange-rate", waitForText: "USD", waitMs: 9000 },
+  { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/en/exchange-rate", waitForText: "USD", waitMs: 9000 },
   { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "USD", waitMs: 4000 },
 ];
 
