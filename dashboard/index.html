@@ -89,6 +89,7 @@
     gap: 6px;
     margin-bottom: 18px;
     border-bottom: 1px solid var(--line);
+    overflow-x: auto;
   }
   .tab {
     font-family: 'IBM Plex Mono', monospace;
@@ -101,6 +102,7 @@
     cursor: pointer;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
+    white-space: nowrap;
   }
   .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
 
@@ -136,7 +138,6 @@
   .bank-name { font-weight: 600; }
   .best { color: var(--up); font-weight: 600; }
   .best::after { content: " ▲"; font-size: 10px; }
-  .worst { color: var(--down); }
   .na { color: #B0B7C2; }
 
   footer {
@@ -230,6 +231,8 @@
     <button class="tab" data-cur="EUR">EUR</button>
     <button class="tab" data-cur="JPY">JPY</button>
     <button class="tab" data-cur="THB">THB</button>
+    <button class="tab" data-cur="GBP">GBP</button>
+    <button class="tab" data-cur="AUD">AUD</button>
   </div>
 
   <div class="card">
@@ -253,9 +256,22 @@
     Chỉ mang tính tham khảo nội bộ — vui lòng đối chiếu lại trước khi dùng cho giao dịch chính thức.
   </footer>
 
-  <button class="manual-toggle" id="manualToggle">Nhập tay VietinBank (khi tự động không lấy được)</button>
+  <button class="manual-toggle" id="manualToggle">Nhập tay (khi tự động không lấy đủ)</button>
   <div class="manual-panel" id="manualPanel">
-    <h3>Nhập tay tỷ giá VietinBank hôm nay</h3>
+    <h3>Nhập tay tỷ giá hôm nay</h3>
+    <div class="manual-pw">
+      <label>Ngân hàng</label>
+      <select id="manualBank" style="width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:13px; box-sizing:border-box;">
+        <option value="VTB">VietinBank</option>
+        <option value="TCB">Techcombank</option>
+        <option value="EIB">Eximbank</option>
+        <option value="ACB">ACB</option>
+      </select>
+      <a id="bankLink" href="#" target="_blank" rel="noopener"
+         style="display:inline-block; margin-top:8px; font-size:12.5px; color:var(--accent); font-weight:600;">
+        ↗ Mở trang tỷ giá VietinBank để xem số
+      </a>
+    </div>
     <div class="manual-pw">
       <label>Mật khẩu</label>
       <input type="password" id="manualPw" autocomplete="off" />
@@ -287,13 +303,24 @@
       <input type="number" step="any" id="m_THB_muaCk" />
       <input type="number" step="any" id="m_THB_ban" />
     </div>
+    <div class="manual-row">
+      <label>GBP</label>
+      <input type="number" step="any" id="m_GBP_muaTm" />
+      <input type="number" step="any" id="m_GBP_muaCk" />
+      <input type="number" step="any" id="m_GBP_ban" />
+    </div>
+    <div class="manual-row">
+      <label>AUD</label>
+      <input type="number" step="any" id="m_AUD_muaTm" />
+      <input type="number" step="any" id="m_AUD_muaCk" />
+      <input type="number" step="any" id="m_AUD_ban" />
+    </div>
     <button class="manual-submit" id="manualSubmit">Lưu</button>
     <div class="manual-msg" id="manualMsg"></div>
   </div>
 
 </div>
 
-<!-- Firebase compat SDK (đơn giản, không cần build step) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <script>
@@ -310,6 +337,7 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
+  const CURRENCIES = ["USD", "EUR", "JPY", "THB", "GBP", "AUD"];
   const BANK_ORDER = ["VCB", "BIDV", "VTB", "AGR", "TCB", "EIB", "TPB", "ACB", "MB"];
   let currentCurrency = "USD";
   let latestData = null;
@@ -336,13 +364,13 @@
 
     const muaCkVals = rows.map((r) => r.bank.rates[currentCurrency].muaCk).filter((v) => v != null);
     const banVals = rows.map((r) => r.bank.rates[currentCurrency].ban).filter((v) => v != null);
-    const maxMuaCk = Math.max(...muaCkVals);
-    const minBan = Math.min(...banVals);
+    const maxMuaCk = muaCkVals.length ? Math.max(...muaCkVals) : null;
+    const minBan = banVals.length ? Math.min(...banVals) : null;
 
     tbody.innerHTML = rows.map(({ code, bank }) => {
       const r = bank.rates[currentCurrency];
-      const muaCkClass = r.muaCk === maxMuaCk ? "best" : "";
-      const banClass = r.ban === minBan ? "best" : "";
+      const muaCkClass = (maxMuaCk !== null && r.muaCk === maxMuaCk) ? "best" : "";
+      const banClass = (minBan !== null && r.ban === minBan) ? "best" : "";
       return `<tr>
         <td class="bank-name">${bank.name}</td>
         <td class="num">${fmt(r.muaTm)}</td>
@@ -360,7 +388,7 @@
       el.textContent = `Thiếu dữ liệu ${latestData.errors.length} ngân hàng (${latestData.errors.map(e => e.bank).join(", ")}) — các ngân hàng khác vẫn cập nhật bình thường.`;
     } else {
       el.className = "status-line show ok";
-      el.textContent = "Tất cả 9 ngân hàng đã cập nhật thành công.";
+      el.textContent = "Tất cả ngân hàng đã cập nhật thành công.";
       setTimeout(() => el.classList.remove("show"), 4000);
     }
   }
@@ -414,9 +442,28 @@
     document.getElementById("manualPanel").classList.toggle("show");
   });
 
+  const BANK_NAMES = { VTB: "VietinBank", TCB: "Techcombank", EIB: "Eximbank", ACB: "ACB" };
+  const BANK_URLS = {
+    VTB: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn",
+    TCB: "https://techcombank.com/cong-cu-tien-ich/ty-gia",
+    EIB: "https://eximbank.com.vn/bang-ty-gia",
+    ACB: "https://acb.com.vn/en/exchange-rate",
+  };
+
+  function syncBankLink() {
+    const code = document.getElementById("manualBank").value;
+    const a = document.getElementById("bankLink");
+    a.href = BANK_URLS[code];
+    a.textContent = `↗ Mở trang tỷ giá ${BANK_NAMES[code]} để xem số`;
+  }
+  document.getElementById("manualBank").addEventListener("change", syncBankLink);
+  syncBankLink();
+
   document.getElementById("manualSubmit").addEventListener("click", async () => {
     const msg = document.getElementById("manualMsg");
     const password = document.getElementById("manualPw").value;
+    const bankCode = document.getElementById("manualBank").value;
+    const bankName = BANK_NAMES[bankCode];
     if (!password) {
       msg.style.color = "var(--down)";
       msg.textContent = "Nhập mật khẩu trước đã.";
@@ -425,7 +472,7 @@
 
     const rates = {};
     let hasAny = false;
-    for (const code of ["USD", "EUR", "JPY", "THB"]) {
+    for (const code of CURRENCIES) {
       const muaTm = parseFloat(document.getElementById(`m_${code}_muaTm`).value);
       const muaCk = parseFloat(document.getElementById(`m_${code}_muaCk`).value);
       const ban = parseFloat(document.getElementById(`m_${code}_ban`).value);
@@ -453,7 +500,7 @@
       const res = await fetch("/api/manual-update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, bankCode: "VTB", bankName: "VietinBank", rates }),
+        body: JSON.stringify({ password, bankCode, bankName, rates }),
       });
       const data = await res.json();
       msg.style.color = data.ok ? "var(--up)" : "var(--down)";
