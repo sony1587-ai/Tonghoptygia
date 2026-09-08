@@ -1,6 +1,8 @@
 // ============================================================================
-// scraper/index.js — TOÀN BỘ logic cào tỷ giá 9 ngân hàng + ghi Firebase.
-// Chạy bởi GitHub Actions (3 lần/ngày) hoặc thủ công (npm run scrape).
+// scraper/index.js — Cào tỷ giá 10 ngân hàng + ghi Firebase.
+// Nguồn chính: trang tỷ giá chính thức của từng ngân hàng.
+// Nguồn phụ: API tổng hợp vnappmob, chỉ dùng bù chỗ trang không đọc được.
+// Chạy bởi GitHub Actions (mỗi giờ trong giờ làm việc) hoặc thủ công.
 // ============================================================================
 
 const admin = require("firebase-admin");
@@ -93,7 +95,7 @@ async function scrapeVietcombank() {
 }
 
 // ---------------------------------------------------------------------------
-// API tổng hợp vnappmob — mã khoá tự xin mỗi lần chạy
+// API tổng hợp vnappmob (NGUỒN PHỤ) — mã khoá tự xin mỗi lần chạy
 // ---------------------------------------------------------------------------
 async function getVnappmobKey() {
   const res = await fetch("https://api.vnappmob.com/api/request_api_key?scope=exchange_rate", {
@@ -137,11 +139,12 @@ async function scrapeViaVnappmob(apiCode, apiKey) {
 }
 
 const BANKS = [
+  { bankCode: "STB", bankName: "Sacombank", url: "https://www.sacombank.com.vn/cong-cu/ty-gia.html", waitForText: "USD", waitMs: 6000, apiCode: "stb" },
   { bankCode: "BIDV", bankName: "BIDV", url: "https://bidv.com.vn/vn/ty-gia-ngoai-te", waitForText: "Mua tiền mặt", waitMs: 4000 },
   { bankCode: "VTB", bankName: "VietinBank", url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn", waitForText: "USD", waitMs: 9000, apiCode: "ctg" },
   { bankCode: "AGR", bankName: "Agribank", url: "https://www.agribank.com.vn/vn/ty-gia", waitForText: "USD", waitMs: 3000 },
   { bankCode: "TCB", bankName: "Techcombank", url: "https://techcombank.com/cong-cu-tien-ich/ty-gia", waitForText: "USD", waitMs: 4000, apiCode: "tcb" },
-  { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 6000, preferLast: true, debugAll: true },
+  { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 6000 },
   { bankCode: "TPB", bankName: "TPBank", url: "https://tpb.vn/cong-cu-tinh-toan/ty-gia-ngoai-te", waitForText: "USD", waitMs: 4000 },
   { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/en/exchange-rate", waitForText: "USD", waitMs: 9000 },
   { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "MUA VÀO", waitForAbsence: "***", waitMs: 8000 },
@@ -210,8 +213,7 @@ function denomPriority(lineText, code) {
   return 3;                                   // (1,2)
 }
 
-function parseBodyText(bodyText, numbersPerRow, opts = {}) {
-  const { preferLast = false, debugAll = false } = opts;
+function parseBodyText(bodyText, numbersPerRow) {
   const lines = bodyText.split("\n").map((l) => l.trim()).filter(Boolean);
   const result = {};
   const diagnostics = [];
@@ -226,20 +228,11 @@ function parseBodyText(bodyText, numbersPerRow, opts = {}) {
       continue;
     }
 
-    // Ưu tiên mệnh giá lớn trước. Với trang có NHIỀU bảng theo khung giờ
-    // (Eximbank), bảng mới nhất nằm cuối trang nên ưu tiên dòng xuất hiện sau.
+    // Ưu tiên dòng mệnh giá lớn (USD 50-100) hoặc dòng không ghi mệnh giá.
     candidateIdxs = candidateIdxs
       .map((i) => ({ i, p: denomPriority(lines[i], code) }))
-      .sort((a, b) => a.p - b.p || (preferLast ? b.i - a.i : a.i - b.i))
+      .sort((a, b) => a.p - b.p || a.i - b.i)
       .map((x) => x.i);
-
-    if (debugAll) {
-      for (const i of candidateIdxs.slice(0, 8)) {
-        const w = lines.slice(i, i + 8).join(" ");
-        const ns = (w.match(/\d[\d.,]*\d|\d/g) || []).map(toNumberGeneric).filter((n) => inBand(code, n));
-        console.log(`      [tất cả ${code}] "${lines[i].slice(0, 40)}" → ${ns.slice(0, 4).join(" | ") || "(không có số)"}`);
-      }
-    }
 
     let found = false;
     // Vòng 1: tìm dòng có đủ 3 số. Vòng 2: chấp nhận dòng chỉ có 2 số.
@@ -322,7 +315,7 @@ async function tryClickCurrency(page, code) {
   }, code);
 }
 
-async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence = null, waitMs = 3000, numbersPerRow = 3, preferLast = false, debugAll = false }) {
+async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence = null, waitMs = 3000, numbersPerRow = 3 }) {
   const browser = await puppeteer.launch({
     headless: "new",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -380,8 +373,10 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence
 
     await new Promise((r) => setTimeout(r, waitMs));
     let bodyText = await page.evaluate(() => document.body.innerText);
-    const parsed = parseBodyText(bodyText, numbersPerRow, { preferLast, debugAll });
+    const parsed = parseBodyText(bodyText, numbersPerRow);
 
+    // Bù bằng dữ liệu bắt được từ lệnh gọi JSON ngầm của CHÍNH trang đó —
+    // vẫn là dữ liệu ngân hàng, không phải bên thứ ba.
     for (const code of WANTED) {
       if (!parsed.result[code] && apiRates[code]) {
         parsed.result[code] = apiRates[code];
@@ -401,7 +396,7 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence
       if (!clicked) continue;
       await new Promise((r) => setTimeout(r, 1800));
       bodyText = await page.evaluate(() => document.body.innerText);
-      const reparsed = parseBodyText(bodyText, numbersPerRow, { preferLast });
+      const reparsed = parseBodyText(bodyText, numbersPerRow);
       if (reparsed.result[code]) {
         parsed.result[code] = reparsed.result[code];
         if (reparsed.picked && reparsed.picked[code]) parsed.picked[code] = reparsed.picked[code];
@@ -485,9 +480,9 @@ async function run() {
   let apiKey = null;
   try {
     apiKey = await withTimeout(getVnappmobKey(), 15000, "vnappmob key");
-    console.log("Đã lấy được api_key vnappmob");
+    console.log("Đã lấy được api_key vnappmob (chỉ dùng làm nguồn phụ)");
   } catch (err) {
-    console.error(`⚠️  Không lấy được api_key vnappmob: ${err.message} — sẽ chỉ dùng cách cào trực tiếp.`);
+    console.error(`⚠️  Không lấy được api_key vnappmob: ${err.message}`);
   }
 
   for (const bank of BANKS) {
@@ -495,34 +490,40 @@ async function run() {
     let rates = {};
     const notes = [];
 
-    if (bank.apiCode && apiKey) {
+    // BƯỚC 1 — Nguồn chính: trang tỷ giá do chính ngân hàng công bố. Đây là
+    // nguồn có thẩm quyền nên luôn ưu tiên trước.
+    try {
+      const { result, diagnostics, bodyLength, rawSnippet, picked } =
+        await withTimeout(scrapeGenericBankTable(bank), 110000, bank.bankName);
+      if (picked) {
+        for (const [c, txt] of Object.entries(picked)) {
+          console.log(`   · ${c} đọc từ: "${txt}"`);
+        }
+      }
+      rates = result;
+      if (WANTED.some((c) => !rates[c])) {
+        notes.push(`cào trực tiếp (trang ${bodyLength} ký tự): ${diagnostics.join(" || ")}`);
+        if (Object.keys(result).length === 0 && rawSnippet) notes.push(`nội dung trang: "${rawSnippet}"`);
+      }
+    } catch (err) {
+      notes.push(`cào trực tiếp: ${err.message}`);
+      console.error(`   ↳ cào trang lỗi: ${err.message}`);
+    }
+
+    // BƯỚC 2 — Chỉ khi trang chính thức còn thiếu loại tiền nào mới lấy API
+    // tổng hợp bên thứ ba bù vào, và đánh dấu riêng để người xem biết.
+    const missingAfterWeb = WANTED.filter((c) => !rates[c]);
+    if (missingAfterWeb.length && bank.apiCode && apiKey) {
       try {
-        rates = await withTimeout(scrapeViaVnappmob(bank.apiCode, apiKey), 20000, `${bank.bankName} (API)`);
-        console.log(`   ↳ API vnappmob: lấy được ${Object.keys(rates).join(", ")}`);
+        const apiRates = await withTimeout(scrapeViaVnappmob(bank.apiCode, apiKey), 20000, `${bank.bankName} (API)`);
+        const filled = [];
+        for (const code of missingAfterWeb) {
+          if (apiRates[code]) { rates[code] = apiRates[code]; filled.push(code); }
+        }
+        if (filled.length) console.log(`   ↳ API vnappmob bù thêm: ${filled.join(", ")}`);
       } catch (err) {
         notes.push(`API: ${err.message}`);
         console.error(`   ↳ API vnappmob lỗi: ${err.message}`);
-      }
-    }
-
-    if (WANTED.some((c) => !rates[c])) {
-      try {
-        const { result, diagnostics, bodyLength, rawSnippet, picked } =
-          await withTimeout(scrapeGenericBankTable(bank), 110000, bank.bankName);
-        if (picked) {
-          for (const [c, txt] of Object.entries(picked)) {
-            console.log(`   · ${c} đọc từ: "${txt}"`);
-          }
-        }
-        for (const code of WANTED) {
-          if (!rates[code] && result[code]) rates[code] = result[code];
-        }
-        if (WANTED.some((c) => !rates[c])) {
-          notes.push(`cào trực tiếp (trang ${bodyLength} ký tự): ${diagnostics.join(" || ")}`);
-          if (Object.keys(result).length === 0 && rawSnippet) notes.push(`nội dung trang: "${rawSnippet}"`);
-        }
-      } catch (err) {
-        notes.push(`cào trực tiếp: ${err.message}`);
       }
     }
 
