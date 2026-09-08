@@ -10,8 +10,6 @@ const puppeteer = require("puppeteer");
 
 const WANTED = ["USD", "EUR", "JPY", "THB"];
 
-// Đảm bảo KHÔNG bước nào có thể treo vô thời hạn — nếu quá `ms`, tự huỷ và
-// báo lỗi rõ ràng thay vì làm nghẽn toàn bộ kịch bản.
 function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
@@ -21,9 +19,6 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// 1. Khởi tạo Firebase Admin SDK
-// ---------------------------------------------------------------------------
 function initFirebase() {
   if (admin.apps.length) return admin;
 
@@ -47,9 +42,6 @@ function initFirebase() {
   return admin;
 }
 
-// ---------------------------------------------------------------------------
-// 2. Vietcombank — nguồn XML tĩnh chính thức, không cần trình duyệt
-// ---------------------------------------------------------------------------
 const VCB_XML_URL = "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx";
 
 function toNumberVCB(str) {
@@ -98,11 +90,6 @@ async function scrapeVietcombank() {
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// 3. 8 ngân hàng còn lại — đọc bằng trình duyệt ảo (Puppeteer), parse theo
-//    text hiển thị (bền hơn dò CSS class cụ thể, nhưng vẫn có thể cần hiệu
-//    chỉnh waitForText/waitMs sau lần chạy thật đầu tiên — xem README).
-// ---------------------------------------------------------------------------
 const BANKS = [
   { bankCode: "BIDV", bankName: "BIDV", url: "https://bidv.com.vn/vn/ty-gia-ngoai-te", waitForText: "Mua tiền mặt", waitMs: 4000 },
   { bankCode: "VTB", bankName: "VietinBank", url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn", waitForText: "USD", waitMs: 9000 },
@@ -155,6 +142,22 @@ function parseBodyText(bodyText, numbersPerRow) {
   return { result, diagnostics };
 }
 
+// Tìm phần tử lá (không có phần tử con) có nội dung chữ trùng khớp chính xác
+// với mã tiền tệ, rồi bấm vào nó — dùng cho các trang hiển thị dạng carousel/
+// chọn từng loại tiền một, nơi số liệu chỉ hiện sau khi chọn đúng mã đó.
+async function tryClickCurrency(page, code) {
+  return page.evaluate((code) => {
+    const all = document.querySelectorAll("body *");
+    for (const el of all) {
+      if (el.children.length === 0 && el.textContent.trim() === code) {
+        el.click();
+        return true;
+      }
+    }
+    return false;
+  }, code);
+}
+
 async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000, numbersPerRow = 3 }) {
   const browser = await puppeteer.launch({
     headless: "new",
@@ -178,21 +181,40 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
     }
 
     await new Promise((r) => setTimeout(r, waitMs));
-    const bodyText = await page.evaluate(() => document.body.innerText);
+    let bodyText = await page.evaluate(() => document.body.innerText);
     const parsed = parseBodyText(bodyText, numbersPerRow);
+
+    // Với các mã còn thiếu, thử bấm chọn đúng mã đó rồi đọc lại — bù cho các
+    // trang hiển thị kiểu carousel (chỉ hiện số của 1-2 loại tiền mặc định).
+    const stillMissing = WANTED.filter((c) => !parsed.result[c]);
+    for (const code of stillMissing) {
+      let clicked = false;
+      try {
+        clicked = await tryClickCurrency(page, code);
+      } catch {
+        continue;
+      }
+      if (!clicked) continue;
+      await new Promise((r) => setTimeout(r, 1800));
+      bodyText = await page.evaluate(() => document.body.innerText);
+      const reparsed = parseBodyText(bodyText, numbersPerRow);
+      if (reparsed.result[code]) {
+        parsed.result[code] = reparsed.result[code];
+        const idx = parsed.diagnostics.findIndex((d) => d.startsWith(`${code}:`));
+        if (idx !== -1) parsed.diagnostics.splice(idx, 1);
+      }
+    }
+
     return { ...parsed, bodyLength: bodyText.length, rawSnippet: bodyText.slice(0, 400) };
   } finally {
     await browser.close();
   }
 }
 
-// ---------------------------------------------------------------------------
-// 4. Điều phối chính: chạy tất cả, ghi vào Firebase
-// ---------------------------------------------------------------------------
 function todayISO() {
   const now = new Date();
   const vnMs = now.getTime() + (7 * 60 - now.getTimezoneOffset()) * 60000;
-  return new Date(vnMs).toISOString().slice(0, 10); // YYYY-MM-DD, giờ VN
+  return new Date(vnMs).toISOString().slice(0, 10);
 }
 
 async function run() {
@@ -215,7 +237,7 @@ async function run() {
   for (const bank of BANKS) {
     console.log(`Bắt đầu: ${bank.bankName}`);
     try {
-      const { result: rates, diagnostics, bodyLength, rawSnippet } = await withTimeout(scrapeGenericBankTable(bank), 55000, bank.bankName);
+      const { result: rates, diagnostics, bodyLength, rawSnippet } = await withTimeout(scrapeGenericBankTable(bank), 65000, bank.bankName);
       const gotCodes = Object.keys(rates);
       if (gotCodes.length === 0) {
         const shortPageNote = rawSnippet ? ` | Nội dung trang: "${rawSnippet}"` : "";
@@ -242,14 +264,12 @@ async function run() {
   const updates = {};
   for (const [code, data] of Object.entries(results)) {
     updates[`rates/${date}/${code}`] = data;
+    updates[`latest/banks/${code}`] = data;
   }
-  updates["latest"] = {
-    date,
-    updatedAt: new Date().toISOString(),
-    banks: results,
-    partial: errors.length > 0,
-    errors,
-  };
+  updates["latest/date"] = date;
+  updates["latest/updatedAt"] = new Date().toISOString();
+  updates["latest/partial"] = errors.length > 0;
+  updates["latest/errors"] = errors;
 
   await db.ref().update(updates);
 
