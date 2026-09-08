@@ -41,6 +41,9 @@ function initFirebase() {
   return admin;
 }
 
+// ---------------------------------------------------------------------------
+// Vietcombank — nguồn XML chính thức, không cần trình duyệt
+// ---------------------------------------------------------------------------
 const VCB_XML_URL = "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx";
 
 function toNumberVCB(str) {
@@ -89,6 +92,9 @@ async function scrapeVietcombank() {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// API tổng hợp vnappmob — mã khoá tự xin mỗi lần chạy
+// ---------------------------------------------------------------------------
 async function getVnappmobKey() {
   const res = await fetch("https://api.vnappmob.com/api/request_api_key?scope=exchange_rate", {
     signal: AbortSignal.timeout(15000),
@@ -202,18 +208,25 @@ function parseBodyText(bodyText, numbersPerRow) {
     }
 
     let found = false;
-    for (const lineIdx of candidateIdxs) {
-      const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
-      const numberMatches = windowText.match(/\d[\d.,]*\d|\d/g) || [];
-      const nums = numberMatches
-        .map(toNumberGeneric)
-        .filter((n) => inBand(code, n));
+    // Vòng 1: tìm dòng có đủ 3 số. Vòng 2: chấp nhận dòng chỉ có 2 số — nhiều
+    // ngân hàng để trống ô "mua tiền mặt" với các ngoại tệ ít giao dịch.
+    for (const minNums of [numbersPerRow, 2]) {
+      for (const lineIdx of candidateIdxs) {
+        const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
+        const numberMatches = windowText.match(/\d[\d.,]*\d|\d/g) || [];
+        const nums = numberMatches
+          .map(toNumberGeneric)
+          .filter((n) => inBand(code, n));
 
-      if (nums.length >= numbersPerRow) {
-        result[code] = { muaTm: nums[0] ?? null, muaCk: nums[1] ?? null, ban: nums[2] ?? null, banCk: nums[3] ?? null, src: "web" };
-        found = true;
-        break;
+        if (nums.length >= minNums) {
+          result[code] = (nums.length >= 3)
+            ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: nums[3] ?? null, src: "web" }
+            : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "web2" };
+          found = true;
+          break;
+        }
       }
+      if (found) break;
     }
 
     if (!found) {
@@ -281,6 +294,8 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     );
 
+    // Lắng nghe mọi phản hồi JSON mà trang tự gọi ngầm — bảng tỷ giá gốc
+    // thường nằm ở đây, kể cả khi giao diện chỉ hiển thị vài loại.
     const apiRates = {};
     page.on("response", async (res) => {
       try {
@@ -340,6 +355,21 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
   } finally {
     await browser.close();
   }
+}
+
+// Ngân hàng không bao giờ bán rẻ hơn mua, và mua chuyển khoản luôn ≥ mua tiền
+// mặt. Dựa vào quy luật đó, sắp xếp lại 3 giá trị tăng dần để sửa các trường
+// hợp đọc lệch thứ tự cột (hay gặp khi lấy từ dữ liệu JSON ngầm).
+function normalizeRate(rate) {
+  if (!rate) return rate;
+  const fields = ["muaTm", "muaCk", "ban"];
+  const present = fields.filter((f) => rate[f] != null);
+  if (present.length < 2) return rate;
+
+  const sorted = present.map((f) => rate[f]).sort((a, b) => a - b);
+  const out = { ...rate };
+  present.forEach((f, i) => { out[f] = sorted[i]; });
+  return out;
 }
 
 // Đối chiếu với Vietcombank — lệch quá 12% gần như chắc chắn là đọc nhầm ô.
@@ -424,6 +454,10 @@ async function run() {
       }
     }
 
+    // Chuẩn hoá thứ tự mua/bán, rồi đối chiếu với Vietcombank.
+    for (const code of Object.keys(rates)) {
+      rates[code] = normalizeRate(rates[code]);
+    }
     const vcbRates = results.VCB && results.VCB.rates;
     if (vcbRates) {
       for (const code of Object.keys(rates)) {
