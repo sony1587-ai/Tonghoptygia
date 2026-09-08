@@ -193,6 +193,23 @@ function inBand(code, v) {
   return v >= b[0] && v <= b[1];
 }
 
+// Nhiều ngân hàng tách USD theo mệnh giá tờ tiền: USD(1,2) / USD(5,10,20) /
+// USD(50,100), giá mua tờ nhỏ thấp hơn hẳn. Dòng cần lấy là mệnh giá lớn nhất
+// (hoặc dòng "USD" trơn không ghi mệnh giá). Trả về số càng nhỏ càng ưu tiên.
+function denomPriority(lineText, code) {
+  const idx = lineText.toUpperCase().indexOf(code);
+  if (idx === -1) return 9;
+  const tail = lineText.slice(idx + code.length, idx + code.length + 24);
+  const paren = tail.match(/[([]([^)\]]{0,20})[)\]]/);
+  if (!paren) return 1;                       // "USD" trơn
+  const nums = (paren[1].match(/\d+/g) || []).map(Number).filter((n) => n <= 200);
+  if (!nums.length) return 1;
+  const max = Math.max(...nums);
+  if (max >= 50) return 0;                    // (50,100) — mệnh giá lớn nhất
+  if (max >= 5) return 2;                     // (5,10,20)
+  return 3;                                   // (1,2)
+}
+
 function parseBodyText(bodyText, numbersPerRow) {
   const lines = bodyText.split("\n").map((l) => l.trim()).filter(Boolean);
   const result = {};
@@ -200,12 +217,19 @@ function parseBodyText(bodyText, numbersPerRow) {
 
   for (const code of WANTED) {
     const codeRegex = new RegExp(`\\b${code}\\b`);
-    const candidateIdxs = lines.map((l, i) => (codeRegex.test(l) ? i : -1)).filter((i) => i !== -1);
+    // Mã tiền tệ có thể xuất hiện nhiều chỗ (ô chọn ngoại tệ, các dòng mệnh
+    // giá khác nhau...) — xếp theo ưu tiên mệnh giá rồi mới thử lần lượt.
+    let candidateIdxs = lines.map((l, i) => (codeRegex.test(l) ? i : -1)).filter((i) => i !== -1);
 
     if (candidateIdxs.length === 0) {
       diagnostics.push(`${code}: không tìm thấy dòng nào chứa mã này trên trang`);
       continue;
     }
+
+    candidateIdxs = candidateIdxs
+      .map((i) => ({ i, p: denomPriority(lines[i], code) }))
+      .sort((a, b) => a.p - b.p || a.i - b.i)
+      .map((x) => x.i);
 
     let found = false;
     // Vòng 1: tìm dòng có đủ 3 số. Vòng 2: chấp nhận dòng chỉ có 2 số — nhiều
@@ -249,20 +273,26 @@ function harvestRatesFromJson(node, out = {}) {
   const strs = values.filter((v) => typeof v === "string");
   const code = strs.map((s) => s.trim().toUpperCase()).find((s) => WANTED.includes(s));
 
-  if (code && !out[code]) {
+  if (code) {
     const nums = [];
     for (const v of values) {
       const n = typeof v === "number" ? v : toNumberGeneric(v);
       if (inBand(code, n)) nums.push(n);
     }
     if (nums.length >= 2) {
-      out[code] = {
+      const candidate = {
         muaTm: nums[0] ?? null,
         muaCk: nums[1] ?? null,
         ban: nums[2] ?? nums[1] ?? null,
         banCk: null,
         src: "xhr",
       };
+      // Dữ liệu JSON thường liệt kê cả các mệnh giá nhỏ (USD 1-2, 5-20) với
+      // giá mua thấp hơn. Giữ bản ghi có giá mua cao nhất — đó là mệnh giá
+      // lớn / loại "USD" thông thường mà bảng tỷ giá hay dùng.
+      const prev = out[code];
+      const score = (r) => Math.max(r.muaTm || 0, r.muaCk || 0);
+      if (!prev || score(candidate) > score(prev)) out[code] = candidate;
     }
   }
 
@@ -306,9 +336,8 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       }
     });
 
-    // Trang ngân hàng đôi khi tải rất chậm. Thử cách chặt trước (đợi mạng
-    // lắng hẳn); nếu quá hạn thì thử lại theo cách nhẹ hơn — chỉ cần khung
-    // HTML tải xong — rồi dựa vào waitForText phía dưới để chờ bảng hiện ra.
+    // Trang ngân hàng đôi khi tải rất chậm. Thử cách chặt trước; nếu quá hạn
+    // thì thử lại theo cách nhẹ hơn.
     try {
       await page.goto(url, { waitUntil: "networkidle2", timeout: 40000 });
     } catch (navErr) {
@@ -365,7 +394,7 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
 
 // Ngân hàng không bao giờ bán rẻ hơn mua, và mua chuyển khoản luôn ≥ mua tiền
 // mặt. Dựa vào quy luật đó, sắp xếp lại 3 giá trị tăng dần để sửa các trường
-// hợp đọc lệch thứ tự cột (hay gặp khi lấy từ dữ liệu JSON ngầm).
+// hợp đọc lệch thứ tự cột.
 function normalizeRate(rate) {
   if (!rate) return rate;
   const fields = ["muaTm", "muaCk", "ban"];
