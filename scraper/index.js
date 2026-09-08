@@ -1,6 +1,6 @@
 // ============================================================================
 // scraper/index.js — TOÀN BỘ logic cào tỷ giá 9 ngân hàng + ghi Firebase.
-// Chạy bởi GitHub Actions (lịch hàng ngày) hoặc thủ công (npm run scrape).
+// Chạy bởi GitHub Actions (3 lần/ngày) hoặc thủ công (npm run scrape).
 // ============================================================================
 
 const admin = require("firebase-admin");
@@ -149,7 +149,7 @@ const BANKS = [
 
 // Các trang ngân hàng viết số không thống nhất: "25.870", "25,870",
 // "25,870.00", "25.870,00", "161.39". Hàm này suy ra đâu là phân cách hàng
-// nghìn, đâu là dấu thập phân, thay vì đoán mò một kiểu duy nhất.
+// nghìn, đâu là dấu thập phân.
 function toNumberGeneric(str) {
   if (!str) return null;
   let s = String(str).trim().replace(/\s/g, "");
@@ -195,7 +195,7 @@ function inBand(code, v) {
 
 // Nhiều ngân hàng tách USD theo mệnh giá tờ tiền: USD(1,2) / USD(5,10,20) /
 // USD(50,100), giá mua tờ nhỏ thấp hơn hẳn. Dòng cần lấy là mệnh giá lớn nhất
-// (hoặc dòng "USD" trơn không ghi mệnh giá). Trả về số càng nhỏ càng ưu tiên.
+// (hoặc dòng "USD" trơn). Trả về số càng nhỏ càng ưu tiên.
 function denomPriority(lineText, code) {
   const idx = lineText.toUpperCase().indexOf(code);
   if (idx === -1) return 9;
@@ -214,6 +214,7 @@ function parseBodyText(bodyText, numbersPerRow) {
   const lines = bodyText.split("\n").map((l) => l.trim()).filter(Boolean);
   const result = {};
   const diagnostics = [];
+  const picked = {};
 
   for (const code of WANTED) {
     const codeRegex = new RegExp(`\\b${code}\\b`);
@@ -232,8 +233,7 @@ function parseBodyText(bodyText, numbersPerRow) {
       .map((x) => x.i);
 
     let found = false;
-    // Vòng 1: tìm dòng có đủ 3 số. Vòng 2: chấp nhận dòng chỉ có 2 số — nhiều
-    // ngân hàng để trống ô "mua tiền mặt" với các ngoại tệ ít giao dịch.
+    // Vòng 1: tìm dòng có đủ 3 số. Vòng 2: chấp nhận dòng chỉ có 2 số.
     for (const minNums of [numbersPerRow, 2]) {
       for (const lineIdx of candidateIdxs) {
         const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
@@ -246,6 +246,9 @@ function parseBodyText(bodyText, numbersPerRow) {
           result[code] = (nums.length >= 3)
             ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: nums[3] ?? null, src: "web" }
             : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "web2" };
+          // Ghi lại đúng đoạn đã đọc, để khi số ra sai còn biết nó lấy từ
+          // dòng nào trên trang mà sửa cho trúng.
+          picked[code] = `${lines[lineIdx].slice(0, 45)} → ${nums.slice(0, 4).join(" | ")}`;
           found = true;
           break;
         }
@@ -258,7 +261,7 @@ function parseBodyText(bodyText, numbersPerRow) {
       diagnostics.push(`${code}: thấy mã ở ${candidateIdxs.length} chỗ nhưng không chỗ nào đủ số — ví dụ: "${firstWindow.slice(0, 150)}"`);
     }
   }
-  return { result, diagnostics };
+  return { result, diagnostics, picked };
 }
 
 function harvestRatesFromJson(node, out = {}) {
@@ -280,16 +283,13 @@ function harvestRatesFromJson(node, out = {}) {
       if (inBand(code, n)) nums.push(n);
     }
     if (nums.length >= 2) {
-      const candidate = {
-        muaTm: nums[0] ?? null,
-        muaCk: nums[1] ?? null,
-        ban: nums[2] ?? nums[1] ?? null,
-        banCk: null,
-        src: "xhr",
-      };
-      // Dữ liệu JSON thường liệt kê cả các mệnh giá nhỏ (USD 1-2, 5-20) với
-      // giá mua thấp hơn. Giữ bản ghi có giá mua cao nhất — đó là mệnh giá
-      // lớn / loại "USD" thông thường mà bảng tỷ giá hay dùng.
+      // Đủ 3 số: mua TM / mua CK / bán. Chỉ 2 số: coi là mua CK và bán, KHÔNG
+      // nhân đôi một số cho hai cột (sẽ ra mua = bán, vô lý).
+      const candidate = (nums.length >= 3)
+        ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: null, src: "xhr" }
+        : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "xhr" };
+      // JSON thường liệt kê cả mệnh giá nhỏ với giá mua thấp hơn. Giữ bản ghi
+      // có giá mua cao nhất — đó là mệnh giá lớn / loại "USD" thông thường.
       const prev = out[code];
       const score = (r) => Math.max(r.muaTm || 0, r.muaCk || 0);
       if (!prev || score(candidate) > score(prev)) out[code] = candidate;
@@ -381,6 +381,7 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       const reparsed = parseBodyText(bodyText, numbersPerRow);
       if (reparsed.result[code]) {
         parsed.result[code] = reparsed.result[code];
+        if (reparsed.picked && reparsed.picked[code]) parsed.picked[code] = reparsed.picked[code];
         const idx = parsed.diagnostics.findIndex((d) => d.startsWith(`${code}:`));
         if (idx !== -1) parsed.diagnostics.splice(idx, 1);
       }
@@ -392,9 +393,8 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
   }
 }
 
-// Ngân hàng không bao giờ bán rẻ hơn mua, và mua chuyển khoản luôn ≥ mua tiền
-// mặt. Dựa vào quy luật đó, sắp xếp lại 3 giá trị tăng dần để sửa các trường
-// hợp đọc lệch thứ tự cột.
+// Ngân hàng luôn bán cao hơn mua. Sắp xếp lại 3 giá trị tăng dần để sửa các
+// trường hợp đọc lệch thứ tự cột.
 function normalizeRate(rate) {
   if (!rate) return rate;
   const fields = ["muaTm", "muaCk", "ban"];
@@ -404,6 +404,10 @@ function normalizeRate(rate) {
   const sorted = present.map((f) => rate[f]).sort((a, b) => a - b);
   const out = { ...rate };
   present.forEach((f, i) => { out[f] = sorted[i]; });
+
+  // Chênh lệch mua–bán bằng 0 nghĩa là đọc trùng ô. Bỏ giá mua, giữ giá bán.
+  if (out.muaCk != null && out.ban != null && out.muaCk === out.ban) out.muaCk = null;
+  if (out.muaTm != null && out.ban != null && out.muaTm === out.ban) out.muaTm = null;
   return out;
 }
 
@@ -443,7 +447,12 @@ async function run() {
 
   console.log("Bắt đầu: Vietcombank");
   try {
-    results.VCB = { name: "Vietcombank", rates: await withTimeout(scrapeVietcombank(), 20000, "Vietcombank") };
+    results.VCB = {
+      name: "Vietcombank",
+      rates: await withTimeout(scrapeVietcombank(), 20000, "Vietcombank"),
+      date,
+      updatedAt: new Date().toISOString(),
+    };
     console.log("✅ Vietcombank: OK");
   } catch (err) {
     errors.push({ bank: "Vietcombank", error: err.message });
@@ -475,8 +484,13 @@ async function run() {
 
     if (WANTED.some((c) => !rates[c])) {
       try {
-        const { result, diagnostics, bodyLength, rawSnippet } =
+        const { result, diagnostics, bodyLength, rawSnippet, picked } =
           await withTimeout(scrapeGenericBankTable(bank), 110000, bank.bankName);
+        if (picked) {
+          for (const [c, txt] of Object.entries(picked)) {
+            console.log(`   · ${c} đọc từ: "${txt}"`);
+          }
+        }
         for (const code of WANTED) {
           if (!rates[code] && result[code]) rates[code] = result[code];
         }
@@ -509,7 +523,7 @@ async function run() {
       continue;
     }
 
-    results[bank.bankCode] = { name: bank.bankName, rates };
+    results[bank.bankCode] = { name: bank.bankName, rates, date, updatedAt: new Date().toISOString() };
     const srcSummary = Object.entries(rates).map(([c, r]) => `${c}:${r.src || "?"}`).join(" ");
     console.log(`   ↳ nguồn: ${srcSummary}`);
     const missing = WANTED.filter((c) => !rates[c]);
