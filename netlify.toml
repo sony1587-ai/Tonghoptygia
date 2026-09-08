@@ -6,3 +6,8 @@
   from = "/api/trigger-update"
   to = "/.netlify/functions/trigger-update"
   status = 200
+
+[[redirects]]
+  from = "/api/manual-update"
+  to = "/.netlify/functions/manual-update"
+  status = 200
