@@ -146,6 +146,60 @@
     line-height: 1.6;
   }
 
+  .manual-toggle {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    margin-top: 14px;
+  }
+  .manual-panel {
+    display: none;
+    margin-top: 12px;
+    padding: 16px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .manual-panel.show { display: block; }
+  .manual-panel h3 { font-size: 14px; margin: 0 0 12px; }
+  .manual-row {
+    display: grid;
+    grid-template-columns: 50px 1fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .manual-row label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+  .manual-row input, .manual-pw input {
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+  .manual-pw { margin-bottom: 12px; }
+  .manual-pw label { font-size: 12.5px; color: var(--ink-soft); display: block; margin-bottom: 4px; }
+  .manual-submit {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .manual-msg { font-size: 12.5px; margin-top: 8px; }
+
   @media (max-width: 640px) {
     thead th, tbody td { padding: 10px 10px; font-size: 13px; }
     h1 { font-size: 19px; }
@@ -199,15 +253,50 @@
     Chỉ mang tính tham khảo nội bộ — vui lòng đối chiếu lại trước khi dùng cho giao dịch chính thức.
   </footer>
 
+  <button class="manual-toggle" id="manualToggle">Nhập tay VietinBank (khi tự động không lấy được)</button>
+  <div class="manual-panel" id="manualPanel">
+    <h3>Nhập tay tỷ giá VietinBank hôm nay</h3>
+    <div class="manual-pw">
+      <label>Mật khẩu</label>
+      <input type="password" id="manualPw" autocomplete="off" />
+    </div>
+    <div class="manual-row">
+      <span></span><label>Mua TM</label><label>Mua CK</label><label>Bán</label>
+    </div>
+    <div class="manual-row">
+      <label>USD</label>
+      <input type="number" step="any" id="m_USD_muaTm" />
+      <input type="number" step="any" id="m_USD_muaCk" />
+      <input type="number" step="any" id="m_USD_ban" />
+    </div>
+    <div class="manual-row">
+      <label>EUR</label>
+      <input type="number" step="any" id="m_EUR_muaTm" />
+      <input type="number" step="any" id="m_EUR_muaCk" />
+      <input type="number" step="any" id="m_EUR_ban" />
+    </div>
+    <div class="manual-row">
+      <label>JPY</label>
+      <input type="number" step="any" id="m_JPY_muaTm" />
+      <input type="number" step="any" id="m_JPY_muaCk" />
+      <input type="number" step="any" id="m_JPY_ban" />
+    </div>
+    <div class="manual-row">
+      <label>THB</label>
+      <input type="number" step="any" id="m_THB_muaTm" />
+      <input type="number" step="any" id="m_THB_muaCk" />
+      <input type="number" step="any" id="m_THB_ban" />
+    </div>
+    <button class="manual-submit" id="manualSubmit">Lưu</button>
+    <div class="manual-msg" id="manualMsg"></div>
+  </div>
+
 </div>
 
 <!-- Firebase compat SDK (đơn giản, không cần build step) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <script>
-  // ⚠️ Đoạn config này lấy từ Firebase Console — không phải bí mật, dùng công
-  // khai phía trình duyệt là bình thường (Firebase bảo mật bằng Rules, không
-  // phải bằng việc giấu apiKey).
   const firebaseConfig = {
     apiKey: "AIzaSyBewhUUCFMT3a0o1V_Wwf10U9zwH-kXM5E",
     authDomain: "tonghoptygia.firebaseapp.com",
@@ -318,6 +407,61 @@
     } finally {
       btn.disabled = false;
       btn.querySelector("svg").classList.remove("spin");
+    }
+  });
+
+  document.getElementById("manualToggle").addEventListener("click", () => {
+    document.getElementById("manualPanel").classList.toggle("show");
+  });
+
+  document.getElementById("manualSubmit").addEventListener("click", async () => {
+    const msg = document.getElementById("manualMsg");
+    const password = document.getElementById("manualPw").value;
+    if (!password) {
+      msg.style.color = "var(--down)";
+      msg.textContent = "Nhập mật khẩu trước đã.";
+      return;
+    }
+
+    const rates = {};
+    let hasAny = false;
+    for (const code of ["USD", "EUR", "JPY", "THB"]) {
+      const muaTm = parseFloat(document.getElementById(`m_${code}_muaTm`).value);
+      const muaCk = parseFloat(document.getElementById(`m_${code}_muaCk`).value);
+      const ban = parseFloat(document.getElementById(`m_${code}_ban`).value);
+      if (!isNaN(muaTm) || !isNaN(muaCk) || !isNaN(ban)) {
+        hasAny = true;
+        rates[code] = {
+          muaTm: isNaN(muaTm) ? null : muaTm,
+          muaCk: isNaN(muaCk) ? null : muaCk,
+          ban: isNaN(ban) ? null : ban,
+          banCk: null,
+        };
+      }
+    }
+
+    if (!hasAny) {
+      msg.style.color = "var(--down)";
+      msg.textContent = "Nhập ít nhất 1 loại tiền trước khi lưu.";
+      return;
+    }
+
+    msg.style.color = "var(--ink-soft)";
+    msg.textContent = "Đang lưu…";
+
+    try {
+      const res = await fetch("/api/manual-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, bankCode: "VTB", bankName: "VietinBank", rates }),
+      });
+      const data = await res.json();
+      msg.style.color = data.ok ? "var(--up)" : "var(--down)";
+      msg.textContent = data.message;
+      if (data.ok) document.getElementById("manualPw").value = "";
+    } catch (err) {
+      msg.style.color = "var(--down)";
+      msg.textContent = "Không gửi được — kiểm tra kết nối mạng.";
     }
   });
 </script>
