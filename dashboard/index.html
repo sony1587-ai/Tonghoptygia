@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Tỷ giá 9 ngân hàng</title>
+<title>Tỷ giá 10 ngân hàng</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -186,6 +186,7 @@
     color: var(--warn);
   }
   .tag.old { background: #FDECEA; color: var(--bad); }
+  .tag.api { background: #EEF0F4; color: var(--ink-2); }
   .clock {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 10px;
@@ -410,8 +411,8 @@
 
   <header class="masthead">
     <div>
-      <h1>Tỷ giá 9 ngân hàng</h1>
-      <p>Vietcombank, BIDV, VietinBank, Agribank và 5 ngân hàng cổ phần, gom về một bảng.</p>
+      <h1>Tỷ giá 10 ngân hàng</h1>
+      <p>Sacombank, nhóm Big 4 và 5 ngân hàng cổ phần khác, gom về một bảng.</p>
     </div>
     <button class="btn" id="refreshBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
@@ -443,6 +444,7 @@
     Ô <span class="sw">tô xanh ▲</span> là mua chuyển khoản cao nhất và bán ra thấp nhất trong ngày.
     Số giờ nhỏ cạnh tên ngân hàng là lúc lấy được tỷ giá đó.
     Ngân hàng chưa có số bấm "lấy số" để mở trang tỷ giá và nhập vào.
+    Nhãn "nguồn phụ" là số lấy từ dịch vụ tổng hợp bên ngoài do trang ngân hàng không đọc được — nên đối chiếu lại khi cần chính xác.
   </p>
 
   <section class="entry" id="entry">
@@ -458,6 +460,7 @@
       <div class="field">
         <label for="manualBank">Ngân hàng</label>
         <select id="manualBank">
+          <option value="STB">Sacombank</option>
           <option value="VTB">VietinBank</option>
           <option value="TCB">Techcombank</option>
           <option value="EIB">Eximbank</option>
@@ -470,7 +473,7 @@
         </select>
         <a class="srclink" id="srcLink" href="#" target="_blank" rel="noopener">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-          <span id="srcLinkText">Mở trang tỷ giá VietinBank</span>
+          <span id="srcLinkText">Mở trang tỷ giá</span>
         </a>
       </div>
 
@@ -490,7 +493,7 @@
   </section>
 
   <footer>
-    Dữ liệu lấy tự động từ trang tỷ giá công bố của từng ngân hàng, cập nhật 8h30, 11h và 14h30.
+    Dữ liệu lấy tự động từ trang tỷ giá công bố của từng ngân hàng, cập nhật mỗi giờ trong giờ làm việc.
     Chỉ dùng để tham khảo nội bộ — đối chiếu lại với ngân hàng trước khi giao dịch.
   </footer>
 
@@ -514,6 +517,7 @@
   const CURRENCIES = ["USD", "EUR", "JPY", "THB", "GBP", "AUD"];
 
   const BANKS = [
+    { code: "STB",  name: "Sacombank",   url: "https://www.sacombank.com.vn/cong-cu/ty-gia.html" },
     { code: "VCB",  name: "Vietcombank", url: "https://www.vietcombank.com.vn/vi-VN/KHCN/Cong-cu-Tien-ich/Ty-gia" },
     { code: "BIDV", name: "BIDV",        url: "https://bidv.com.vn/vn/ty-gia-ngoai-te" },
     { code: "VTB",  name: "VietinBank",  url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn" },
@@ -611,8 +615,10 @@
       let tag = "";
       if (stale) tag = `<span class="tag old">số ${dm(date)}</span>`;
       else if (r.src === "manual") tag = '<span class="tag">nhập tay</span>';
-      // Tỷ giá đổi nhiều lần trong ngày, nên giờ lấy số của từng ngân hàng
-      // quan trọng không kém con số.
+      // Số lấy từ API tổng hợp bên thứ ba (không phải trang ngân hàng) —
+      // đánh dấu để người xem biết mà đối chiếu khi cần chính xác tuyệt đối.
+      else if (r.src === "api") tag = '<span class="tag api">nguồn phụ</span>';
+
       const clock = (!stale && at) ? `<span class="clock">${hhmm(at)}</span>` : "";
 
       const cell = (v, best) => {
