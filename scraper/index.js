@@ -141,10 +141,10 @@ const BANKS = [
   { bankCode: "VTB", bankName: "VietinBank", url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn", waitForText: "USD", waitMs: 9000, apiCode: "ctg" },
   { bankCode: "AGR", bankName: "Agribank", url: "https://www.agribank.com.vn/vn/ty-gia", waitForText: "USD", waitMs: 3000 },
   { bankCode: "TCB", bankName: "Techcombank", url: "https://techcombank.com/cong-cu-tien-ich/ty-gia", waitForText: "USD", waitMs: 4000, apiCode: "tcb" },
-  { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 3000 },
+  { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 6000, preferLast: true, debugAll: true },
   { bankCode: "TPB", bankName: "TPBank", url: "https://tpb.vn/cong-cu-tinh-toan/ty-gia-ngoai-te", waitForText: "USD", waitMs: 4000 },
   { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/en/exchange-rate", waitForText: "USD", waitMs: 9000 },
-  { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "USD", waitMs: 4000 },
+  { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "MUA VÀO", waitForAbsence: "***", waitMs: 8000 },
 ];
 
 // Các trang ngân hàng viết số không thống nhất: "25.870", "25,870",
@@ -210,7 +210,8 @@ function denomPriority(lineText, code) {
   return 3;                                   // (1,2)
 }
 
-function parseBodyText(bodyText, numbersPerRow) {
+function parseBodyText(bodyText, numbersPerRow, opts = {}) {
+  const { preferLast = false, debugAll = false } = opts;
   const lines = bodyText.split("\n").map((l) => l.trim()).filter(Boolean);
   const result = {};
   const diagnostics = [];
@@ -218,8 +219,6 @@ function parseBodyText(bodyText, numbersPerRow) {
 
   for (const code of WANTED) {
     const codeRegex = new RegExp(`\\b${code}\\b`);
-    // Mã tiền tệ có thể xuất hiện nhiều chỗ (ô chọn ngoại tệ, các dòng mệnh
-    // giá khác nhau...) — xếp theo ưu tiên mệnh giá rồi mới thử lần lượt.
     let candidateIdxs = lines.map((l, i) => (codeRegex.test(l) ? i : -1)).filter((i) => i !== -1);
 
     if (candidateIdxs.length === 0) {
@@ -227,10 +226,20 @@ function parseBodyText(bodyText, numbersPerRow) {
       continue;
     }
 
+    // Ưu tiên mệnh giá lớn trước. Với trang có NHIỀU bảng theo khung giờ
+    // (Eximbank), bảng mới nhất nằm cuối trang nên ưu tiên dòng xuất hiện sau.
     candidateIdxs = candidateIdxs
       .map((i) => ({ i, p: denomPriority(lines[i], code) }))
-      .sort((a, b) => a.p - b.p || a.i - b.i)
+      .sort((a, b) => a.p - b.p || (preferLast ? b.i - a.i : a.i - b.i))
       .map((x) => x.i);
+
+    if (debugAll) {
+      for (const i of candidateIdxs.slice(0, 8)) {
+        const w = lines.slice(i, i + 8).join(" ");
+        const ns = (w.match(/\d[\d.,]*\d|\d/g) || []).map(toNumberGeneric).filter((n) => inBand(code, n));
+        console.log(`      [tất cả ${code}] "${lines[i].slice(0, 40)}" → ${ns.slice(0, 4).join(" | ") || "(không có số)"}`);
+      }
+    }
 
     let found = false;
     // Vòng 1: tìm dòng có đủ 3 số. Vòng 2: chấp nhận dòng chỉ có 2 số.
@@ -313,7 +322,7 @@ async function tryClickCurrency(page, code) {
   }, code);
 }
 
-async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000, numbersPerRow = 3 }) {
+async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence = null, waitMs = 3000, numbersPerRow = 3, preferLast = false, debugAll = false }) {
   const browser = await puppeteer.launch({
     headless: "new",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -355,9 +364,23 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       // Không thấy text mong đợi — vẫn thử đọc.
     }
 
+    // Một số trang (MB) trả về khung mẫu chưa điền số, chứa các ký hiệu như
+    // "***x.buy_cash***". Chờ đến khi ký hiệu đó biến mất mới đọc.
+    if (waitForAbsence) {
+      try {
+        await page.waitForFunction(
+          (mark) => document.body && !document.body.innerText.includes(mark),
+          { timeout: 20000 },
+          waitForAbsence
+        );
+      } catch {
+        console.log(`   ⏳ vẫn còn khung mẫu chưa điền số sau 20s`);
+      }
+    }
+
     await new Promise((r) => setTimeout(r, waitMs));
     let bodyText = await page.evaluate(() => document.body.innerText);
-    const parsed = parseBodyText(bodyText, numbersPerRow);
+    const parsed = parseBodyText(bodyText, numbersPerRow, { preferLast, debugAll });
 
     for (const code of WANTED) {
       if (!parsed.result[code] && apiRates[code]) {
@@ -378,7 +401,7 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       if (!clicked) continue;
       await new Promise((r) => setTimeout(r, 1800));
       bodyText = await page.evaluate(() => document.body.innerText);
-      const reparsed = parseBodyText(bodyText, numbersPerRow);
+      const reparsed = parseBodyText(bodyText, numbersPerRow, { preferLast });
       if (reparsed.result[code]) {
         parsed.result[code] = reparsed.result[code];
         if (reparsed.picked && reparsed.picked[code]) parsed.picked[code] = reparsed.picked[code];
