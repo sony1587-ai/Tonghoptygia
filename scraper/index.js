@@ -74,8 +74,6 @@ async function scrapeVietcombank() {
   try {
     parsed = await xml2js.parseStringPromise(xml);
   } catch (parseErr) {
-    // In ra 300 ký tự đầu của phản hồi thực tế để chẩn đoán (có thể là trang
-    // chặn bot thay vì XML thật) — sẽ hiện trong log GitHub Actions.
     throw new Error(`${parseErr.message} | Phản hồi thực nhận (300 ký tự đầu): ${xml.slice(0, 300)}`);
   }
   const rows = parsed?.ExrateList?.Exrate || [];
@@ -129,8 +127,6 @@ function parseBodyText(bodyText, numbersPerRow) {
 
   for (const code of WANTED) {
     const codeRegex = new RegExp(`\\b${code}\\b`);
-    // Có thể mã tiền tệ xuất hiện nhiều chỗ (ô chọn ngoại tệ, danh sách carousel...)
-    // — thử LẦN LƯỢT từng chỗ, chọn chỗ đầu tiên có đủ số hợp lệ đi kèm.
     const candidateIdxs = lines.map((l, i) => (codeRegex.test(l) ? i : -1)).filter((i) => i !== -1);
 
     if (candidateIdxs.length === 0) {
@@ -184,7 +180,7 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
     await new Promise((r) => setTimeout(r, waitMs));
     const bodyText = await page.evaluate(() => document.body.innerText);
     const parsed = parseBodyText(bodyText, numbersPerRow);
-    return { ...parsed, bodyLength: bodyText.length, rawSnippet: bodyText.length < 500 ? bodyText : null };
+    return { ...parsed, bodyLength: bodyText.length, rawSnippet: bodyText.slice(0, 400) };
   } finally {
     await browser.close();
   }
@@ -220,16 +216,19 @@ async function run() {
     console.log(`Bắt đầu: ${bank.bankName}`);
     try {
       const { result: rates, diagnostics, bodyLength, rawSnippet } = await withTimeout(scrapeGenericBankTable(bank), 55000, bank.bankName);
-      const gotAll = WANTED.every((c) => rates[c]);
-      if (!gotAll) {
-        const shortPageNote = rawSnippet ? ` | Toàn bộ nội dung trang (nghi bị chặn bot hoặc bảng nằm trong iframe): "${rawSnippet}"` : "";
-        throw new Error(
-          `chỉ lấy được ${Object.keys(rates).join(", ") || "không có"} (trang tải ${bodyLength} ký tự) — ` +
-          diagnostics.join(" || ") + shortPageNote
-        );
+      const gotCodes = Object.keys(rates);
+      if (gotCodes.length === 0) {
+        const shortPageNote = rawSnippet ? ` | Nội dung trang: "${rawSnippet}"` : "";
+        throw new Error(`không lấy được loại tiền nào (trang tải ${bodyLength} ký tự) — ${diagnostics.join(" || ")}${shortPageNote}`);
       }
       results[bank.bankCode] = { name: bank.bankName, rates };
-      console.log(`✅ ${bank.bankName}: OK`);
+      const missing = WANTED.filter((c) => !rates[c]);
+      if (missing.length) {
+        console.log(`⚠️  ${bank.bankName}: thiếu ${missing.join(", ")} — vẫn lưu ${gotCodes.join(", ")}`);
+        errors.push({ bank: bank.bankName, error: `thiếu ${missing.join(", ")}`, partial: true });
+      } else {
+        console.log(`✅ ${bank.bankName}: OK`);
+      }
     } catch (err) {
       errors.push({ bank: bank.bankName, error: err.message });
       console.error(`❌ ${bank.bankName}: ${err.message}`);
