@@ -185,30 +185,15 @@
     background: var(--warn-tint);
     color: var(--warn);
   }
-
-  .val {
-    text-align: right;
+  .tag.old { background: #FDECEA; color: var(--bad); }
+  .clock {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 13.5px;
+    font-size: 10px;
+    color: var(--ink-3);
     font-weight: 500;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
   }
-  .val.none { color: #C3CAD5; font-weight: 400; }
-  .val.top {
-    color: #08553F;
-    font-weight: 700;
-    background: var(--good-tint);
-    border-radius: 5px;
-    padding: 3px 6px;
-    margin: -3px -2px;
-  }
-  .val.top::after {
-    content: "▲";
-    font-size: 8px;
-    margin-left: 3px;
-    vertical-align: 2px;
-  }
+  .staleRow { background: #FFFBF5; }
+  .val.stale { color: var(--ink-3); }
 
   .getlink {
     font-size: 11px;
@@ -247,6 +232,30 @@
     outline: none;
     border-color: var(--brand);
     box-shadow: 0 0 0 3px var(--brand-tint);
+  }
+
+  .val {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .val.none { color: #C3CAD5; font-weight: 400; }
+  .val.top {
+    color: #08553F;
+    font-weight: 700;
+    background: var(--good-tint);
+    border-radius: 5px;
+    padding: 3px 6px;
+    margin: -3px -2px;
+  }
+  .val.top::after {
+    content: "▲";
+    font-size: 8px;
+    margin-left: 3px;
+    vertical-align: 2px;
   }
 
   .legend {
@@ -432,6 +441,7 @@
 
   <p class="legend">
     Ô <span class="sw">tô xanh ▲</span> là mua chuyển khoản cao nhất và bán ra thấp nhất trong ngày.
+    Số giờ nhỏ cạnh tên ngân hàng là lúc lấy được tỷ giá đó.
     Ngân hàng chưa có số bấm "lấy số" để mở trang tỷ giá và nhập vào.
   </p>
 
@@ -480,7 +490,7 @@
   </section>
 
   <footer>
-    Dữ liệu lấy tự động từ trang tỷ giá công bố của từng ngân hàng, cập nhật mỗi sáng.
+    Dữ liệu lấy tự động từ trang tỷ giá công bố của từng ngân hàng, cập nhật 8h30, 11h và 14h30.
     Chỉ dùng để tham khảo nội bộ — đối chiếu lại với ngân hàng trước khi giao dịch.
   </footer>
 
@@ -542,19 +552,24 @@
 
   function drawBoard() {
     const banks = (data && data.banks) || {};
+    const today = (data && data.date) || null;
 
-    const rowsData = BANKS.map((b) => ({
-      bank: b,
-      r: (banks[b.code] && banks[b.code].rates && banks[b.code].rates[currency]) || null,
-    }));
+    const rowsData = BANKS.map((b) => {
+      const bank = banks[b.code];
+      const r = (bank && bank.rates && bank.rates[currency]) || null;
+      // Số của ngày cũ vẫn hiện để tham khảo, nhưng đánh dấu rõ và KHÔNG đưa
+      // vào so sánh "tốt nhất" — một con số cũ có thể chiếm mất dấu tô xanh
+      // và gây hiểu nhầm là ngân hàng đó đang có giá tốt nhất hôm nay.
+      const stale = !!(r && today && bank && bank.date && bank.date !== today);
+      return { bank: b, r, stale, date: bank && bank.date, at: bank && bank.updatedAt };
+    });
 
-    const present = rowsData.map((x) => x.r).filter(Boolean);
-    const ckVals  = present.map((r) => r.muaCk).filter((v) => v != null);
-    const banVals = present.map((r) => r.ban).filter((v) => v != null);
+    const fresh = rowsData.filter((x) => x.r && !x.stale).map((x) => x.r);
+    const ckVals  = fresh.map((r) => r.muaCk).filter((v) => v != null);
+    const banVals = fresh.map((r) => r.ban).filter((v) => v != null);
     const bestCk  = ckVals.length  ? Math.max(...ckVals)  : null;
     const bestBan = banVals.length ? Math.min(...banVals) : null;
 
-    // Hàng chưa có số liệu luôn dồn xuống cuối vì không so sánh được.
     if (sortBy !== "default") {
       const [field, dir] = sortBy.split("-");
       rowsData.sort((a, b) => {
@@ -571,7 +586,19 @@
       '<span>Ngân hàng</span><span>Mua tiền mặt</span><span>Mua chuyển khoản</span><span>Bán</span>' +
       '</div>';
 
-    const rows = rowsData.map(({ bank: b, r }) => {
+    const dm = (iso) => {
+      if (!iso) return "";
+      const p = iso.split("-");
+      return p.length === 3 ? `${p[2]}/${p[1]}` : iso;
+    };
+
+    const hhmm = (iso) => {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return isNaN(d) ? "" : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const rows = rowsData.map(({ bank: b, r, stale, date, at }) => {
       if (!r) {
         return '<div class="row empty">' +
           `<span class="bank">${b.name}` +
@@ -581,16 +608,26 @@
           '</div>';
       }
 
-      const tag = r.src === "manual" ? '<span class="tag">nhập tay</span>' : "";
+      let tag = "";
+      if (stale) tag = `<span class="tag old">số ${dm(date)}</span>`;
+      else if (r.src === "manual") tag = '<span class="tag">nhập tay</span>';
+      // Tỷ giá đổi nhiều lần trong ngày, nên giờ lấy số của từng ngân hàng
+      // quan trọng không kém con số.
+      const clock = (!stale && at) ? `<span class="clock">${hhmm(at)}</span>` : "";
+
       const cell = (v, best) => {
         const t = money(v);
         if (t === null) return '<span class="val none">—</span>';
-        const isTop = best != null && v === best;
-        return `<span class="val${isTop ? " top" : ""}">${t}</span>`;
+        const isTop = !stale && best != null && v === best;
+        return `<span class="val${isTop ? " top" : ""}${stale ? " stale" : ""}">${t}</span>`;
       };
 
-      return '<div class="row">' +
-        `<span class="bank">${b.name}${tag}</span>` +
+      const extra = stale
+        ? `<a class="getlink" href="${b.url}" target="_blank" rel="noopener" data-fill="${b.code}">cập nhật ↗</a>`
+        : "";
+
+      return `<div class="row${stale ? " staleRow" : ""}">` +
+        `<span class="bank">${b.name}${tag}${clock}${extra}</span>` +
         cell(r.muaTm, null) + cell(r.muaCk, bestCk) + cell(r.ban, bestBan) +
         '</div>';
     }).join("");
@@ -633,8 +670,8 @@
     drawBoard();
   });
 
-  // Bấm "lấy số": mở trang ngân hàng ở tab mới, đồng thời mở sẵn ô nhập tay
-  // đã chọn đúng ngân hàng đó.
+  // Bấm "lấy số" / "cập nhật": mở trang ngân hàng ở tab mới, đồng thời mở sẵn
+  // ô nhập tay đã chọn đúng ngân hàng đó.
   el("board").addEventListener("click", (e) => {
     const link = e.target.closest(".getlink");
     if (!link) return;
