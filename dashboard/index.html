@@ -3,60 +3,72 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Tỷ giá 9 ngân hàng — Big 4 + 5 NHTMCP</title>
+<title>Tỷ giá 9 ngân hàng</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #101828;
-    --ink-soft: #475467;
-    --paper: #EEF1F6;
-    --paper-raised: #FFFFFF;
-    --line: #D7DCE5;
-    --accent: #0F6E5D;
-    --accent-soft: #E3F1EC;
-    --up: #0F6E5D;
-    --down: #B3261E;
-    --amber: #B7791F;
-    --radius: 10px;
+    --ink:        #16202E;
+    --ink-2:      #55637A;
+    --ink-3:      #8A96A8;
+    --bg:         #F2F4F7;
+    --surface:    #FFFFFF;
+    --line:       #E1E6ED;
+    --line-soft:  #EFF2F6;
+    --brand:      #1B4B73;
+    --brand-dark: #143A5A;
+    --brand-tint: #EAF1F7;
+    --good:       #0B7A5A;
+    --good-tint:  #E6F4EF;
+    --warn:       #9A6208;
+    --warn-tint:  #FCF3E2;
+    --bad:        #A32B22;
+    --bad-tint:   #FBEAE8;
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
-    background: var(--paper);
+    background: var(--bg);
     color: var(--ink);
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 60px; }
 
-  header.top {
+  .wrap { max-width: 900px; margin: 0 auto; padding: 20px 16px 56px; }
+
+  .masthead {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-bottom: 22px;
+    align-items: flex-end;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--ink);
   }
   h1 {
-    font-size: 22px;
+    font-size: 21px;
     font-weight: 700;
-    margin: 0 0 4px;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
+    margin: 0;
+    line-height: 1.2;
   }
-  .subtitle { color: var(--ink-soft); font-size: 14px; margin: 0; }
-  .meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .updated-at {
-    font-family: 'IBM Plex Mono', monospace;
+  .masthead p {
+    margin: 5px 0 0;
     font-size: 12.5px;
-    color: var(--ink-soft);
+    color: var(--ink-2);
+    max-width: 46ch;
   }
-  .btn-refresh {
-    background: var(--accent);
-    color: white;
+  .btn {
+    flex-shrink: 0;
+    background: var(--brand);
+    color: #fff;
     border: none;
-    padding: 9px 16px;
-    border-radius: var(--radius);
+    padding: 10px 15px;
+    border-radius: 8px;
     font-family: inherit;
     font-size: 13.5px;
     font-weight: 600;
@@ -64,260 +76,354 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    transition: background 0.15s ease;
   }
-  .btn-refresh:hover { background: #0C5A4C; }
-  .btn-refresh:disabled { background: #9AA4B2; cursor: default; }
-  .btn-refresh svg { width: 14px; height: 14px; }
-  .spin { animation: spin 0.9s linear infinite; }
+  .btn:hover { background: var(--brand-dark); }
+  .btn:disabled { background: var(--ink-3); cursor: default; }
+  .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .btn svg { width: 14px; height: 14px; }
+  .spin { animation: spin .9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
-  .status-line {
-    font-size: 13px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    display: none;
-  }
-  .status-line.show { display: block; }
-  .status-line.ok { background: var(--accent-soft); color: var(--accent); }
-  .status-line.warn { background: #FBF0DC; color: var(--amber); }
-  .status-line.err { background: #FBE7E5; color: var(--down); }
-
-  .tabs {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 18px;
-    border-bottom: 1px solid var(--line);
-    overflow-x: auto;
-  }
-  .tab {
+  .stamp {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 13.5px;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    padding: 10px 0 14px;
+  }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  .notice {
+    display: none;
+    font-size: 13px;
+    padding: 10px 13px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    border-left: 3px solid;
+  }
+  .notice.show { display: block; }
+  .notice.ok   { background: var(--good-tint); color: var(--good); border-color: var(--good); }
+  .notice.warn { background: var(--warn-tint); color: var(--warn); border-color: var(--warn); }
+  .notice.err  { background: var(--bad-tint);  color: var(--bad);  border-color: var(--bad); }
+
+  .picker {
+    display: flex;
+    gap: 4px;
+    background: #E4E8EF;
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .picker::-webkit-scrollbar { display: none; }
+  .pick {
+    flex: 1 0 auto;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
     font-weight: 600;
-    color: var(--ink-soft);
+    color: var(--ink-2);
     background: none;
     border: none;
-    padding: 10px 16px;
+    padding: 8px 14px;
+    border-radius: 7px;
     cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
     white-space: nowrap;
   }
-  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .pick[aria-selected="true"] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgba(22,32,46,.12);
+  }
+  .pick:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 
-  .card {
-    background: var(--paper-raised);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    text-align: left;
-    font-size: 11.5px;
-    text-transform: none;
-    color: var(--ink-soft);
-    font-weight: 600;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--line);
-  }
-  thead th.num { text-align: right; }
-  tbody td {
-    padding: 12px 16px;
-    border-bottom: 1px solid #EEF0F3;
-    font-size: 14px;
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody td.num {
-    text-align: right;
-    font-family: 'IBM Plex Mono', monospace;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-  }
-  .bank-name { font-weight: 600; }
-  .best { color: var(--up); font-weight: 600; }
-  .best::after { content: " ▲"; font-size: 10px; }
-  .na { color: #B0B7C2; }
-
-  footer {
-    margin-top: 22px;
-    font-size: 12px;
-    color: var(--ink-soft);
-    line-height: 1.6;
-  }
-
-  .manual-toggle {
-    background: none;
-    border: none;
-    color: var(--ink-soft);
-    font-size: 12.5px;
-    font-family: inherit;
-    cursor: pointer;
-    text-decoration: underline;
-    padding: 0;
-    margin-top: 14px;
-  }
-  .manual-panel {
-    display: none;
-    margin-top: 12px;
-    padding: 16px;
-    background: var(--paper-raised);
+  .board {
+    background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 12px;
+    overflow: hidden;
   }
-  .manual-panel.show { display: block; }
-  .manual-panel h3 { font-size: 14px; margin: 0 0 12px; }
-  .manual-row {
+  .row {
     display: grid;
-    grid-template-columns: 50px 1fr 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: minmax(94px, 1.5fr) repeat(3, minmax(62px, 1fr));
+    gap: 6px;
     align-items: center;
-    margin-bottom: 8px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line-soft);
   }
-  .manual-row label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
-  .manual-row input, .manual-pw input {
+  .row:last-child { border-bottom: none; }
+  .row.head {
+    background: #FAFBFC;
+    border-bottom: 1px solid var(--line);
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .row.head span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-2);
+    line-height: 1.3;
+  }
+  .row.head span:not(:first-child) { text-align: right; }
+  .row.empty { background: #FCFCFD; }
+
+  .bank {
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .row.empty .bank { color: var(--ink-3); font-weight: 500; }
+
+  .tag {
+    font-size: 9.5px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: var(--warn-tint);
+    color: var(--warn);
+  }
+
+  .val {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .val.none { color: #C3CAD5; font-weight: 400; }
+  .val.top { color: var(--good); font-weight: 600; }
+  .val.top::after {
+    content: "▲";
+    font-size: 8px;
+    margin-left: 3px;
+    vertical-align: 2px;
+  }
+
+  .legend {
+    font-size: 11.5px;
+    color: var(--ink-2);
+    padding: 11px 2px 0;
+    line-height: 1.6;
+    margin: 0;
+  }
+  .legend .sw { color: var(--good); font-weight: 600; }
+
+  .entry {
+    margin-top: 22px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--warn);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .entry-head {
     width: 100%;
-    padding: 7px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: none;
+    border: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+  }
+  .entry-head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .entry-head h2 { font-size: 14.5px; font-weight: 600; margin: 0; }
+  .entry-head p { font-size: 12.5px; color: var(--ink-2); margin: 3px 0 0; }
+  .chev { flex-shrink: 0; width: 16px; height: 16px; color: var(--ink-2); transition: transform .18s ease; }
+  .entry.open .chev { transform: rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
+
+  .entry-body { display: none; padding: 0 16px 16px; }
+  .entry.open .entry-body { display: block; }
+
+  .field { margin-bottom: 13px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin-bottom: 5px;
+  }
+  .field select, .field input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 14px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-tint);
+  }
+
+  .srclink {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--brand);
+    text-decoration: none;
+  }
+  .srclink:hover { text-decoration: underline; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 46px repeat(3, 1fr);
+    gap: 7px;
+    align-items: center;
+    margin-bottom: 7px;
+  }
+  .grid.labels span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-2);
+    text-align: center;
+  }
+  .grid.labels span:first-child { text-align: left; }
+  .grid > label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .grid input {
+    width: 100%;
+    padding: 8px 7px;
     border: 1px solid var(--line);
     border-radius: 6px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 13px;
-    box-sizing: border-box;
+    text-align: right;
+    background: var(--surface);
+    color: var(--ink);
   }
-  .manual-pw { margin-bottom: 12px; }
-  .manual-pw label { font-size: 12.5px; color: var(--ink-soft); display: block; margin-bottom: 4px; }
-  .manual-submit {
-    background: var(--accent);
-    color: white;
+  .grid input:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-tint);
+  }
+
+  .save {
+    width: 100%;
+    background: var(--brand);
+    color: #fff;
     border: none;
-    padding: 8px 14px;
+    padding: 11px;
     border-radius: 8px;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    margin-top: 6px;
+    margin-top: 10px;
   }
-  .manual-msg { font-size: 12.5px; margin-top: 8px; }
+  .save:hover { background: var(--brand-dark); }
+  .save:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .msg { font-size: 12.5px; margin-top: 9px; min-height: 18px; }
 
-  @media (max-width: 640px) {
-    thead th, tbody td { padding: 10px 10px; font-size: 13px; }
-    h1 { font-size: 19px; }
+  footer {
+    margin-top: 20px;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    line-height: 1.65;
+  }
+
+  @media (max-width: 560px) {
+    .masthead { flex-direction: column; align-items: stretch; }
+    .btn { justify-content: center; }
+    .row { padding: 10px 11px; gap: 4px; }
+    .val { font-size: 12.5px; }
+    .bank { font-size: 13px; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <header class="top">
+  <header class="masthead">
     <div>
       <h1>Tỷ giá 9 ngân hàng</h1>
-      <p class="subtitle">Big 4 (Vietcombank · BIDV · VietinBank · Agribank) + 5 NHTMCP (Techcombank · Eximbank · TPBank · ACB · MB)</p>
+      <p>Vietcombank, BIDV, VietinBank, Agribank và 5 ngân hàng cổ phần, gom về một bảng.</p>
     </div>
-    <div class="meta-row">
-      <span class="updated-at" id="updatedAt">—</span>
-      <button class="btn-refresh" id="refreshBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
-        Cập nhật ngay
-      </button>
-    </div>
+    <button class="btn" id="refreshBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
+      Cập nhật ngay
+    </button>
   </header>
 
-  <div class="status-line" id="statusLine"></div>
+  <div class="stamp" id="stamp">Đang tải…</div>
 
-  <div class="tabs" id="tabs">
-    <button class="tab active" data-cur="USD">USD</button>
-    <button class="tab" data-cur="EUR">EUR</button>
-    <button class="tab" data-cur="JPY">JPY</button>
-    <button class="tab" data-cur="THB">THB</button>
-    <button class="tab" data-cur="GBP">GBP</button>
-    <button class="tab" data-cur="AUD">AUD</button>
-  </div>
+  <div class="notice" id="notice" role="status"></div>
 
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Ngân hàng</th>
-          <th class="num">Mua tiền mặt</th>
-          <th class="num">Mua chuyển khoản</th>
-          <th class="num">Bán</th>
-        </tr>
-      </thead>
-      <tbody id="tbody">
-        <tr><td colspan="4" style="padding:28px 16px; color:var(--ink-soft);">Đang tải dữ liệu…</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <div class="picker" id="picker" role="tablist" aria-label="Chọn ngoại tệ"></div>
+
+  <div class="board" id="board"></div>
+
+  <p class="legend">
+    <span class="sw">▲</span> đánh dấu ngân hàng mua chuyển khoản cao nhất và bán ra thấp nhất trong ngày.
+  </p>
+
+  <section class="entry" id="entry">
+    <button class="entry-head" id="entryToggle" aria-expanded="false" aria-controls="entryBody">
+      <span>
+        <h2>Nhập tỷ giá thủ công</h2>
+        <p>Dùng khi ngân hàng chặn lấy dữ liệu tự động, ví dụ VietinBank.</p>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+
+    <div class="entry-body" id="entryBody">
+      <div class="field">
+        <label for="manualBank">Ngân hàng</label>
+        <select id="manualBank">
+          <option value="VTB">VietinBank</option>
+          <option value="TCB">Techcombank</option>
+          <option value="EIB">Eximbank</option>
+          <option value="ACB">ACB</option>
+          <option value="VCB">Vietcombank</option>
+          <option value="BIDV">BIDV</option>
+          <option value="AGR">Agribank</option>
+          <option value="TPB">TPBank</option>
+          <option value="MB">MB</option>
+        </select>
+        <a class="srclink" id="srcLink" href="#" target="_blank" rel="noopener">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+          <span id="srcLinkText">Mở trang tỷ giá VietinBank</span>
+        </a>
+      </div>
+
+      <div class="field">
+        <label for="manualPw">Mật khẩu</label>
+        <input type="password" id="manualPw" autocomplete="off" />
+      </div>
+
+      <div class="grid labels">
+        <span>Loại</span><span>Mua TM</span><span>Mua CK</span><span>Bán</span>
+      </div>
+      <div id="entryRows"></div>
+
+      <button class="save" id="manualSubmit">Lưu tỷ giá</button>
+      <div class="msg" id="manualMsg" role="status"></div>
+    </div>
+  </section>
 
   <footer>
-    Dữ liệu tự động cào từ website chính thức từng ngân hàng, cập nhật theo lịch hàng ngày.
-    Chỉ mang tính tham khảo nội bộ — vui lòng đối chiếu lại trước khi dùng cho giao dịch chính thức.
+    Dữ liệu lấy tự động từ trang tỷ giá công bố của từng ngân hàng, cập nhật mỗi sáng.
+    Chỉ dùng để tham khảo nội bộ — đối chiếu lại với ngân hàng trước khi giao dịch.
   </footer>
-
-  <button class="manual-toggle" id="manualToggle">Nhập tay (khi tự động không lấy đủ)</button>
-  <div class="manual-panel" id="manualPanel">
-    <h3>Nhập tay tỷ giá hôm nay</h3>
-    <div class="manual-pw">
-      <label>Ngân hàng</label>
-      <select id="manualBank" style="width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:13px; box-sizing:border-box;">
-        <option value="VTB">VietinBank</option>
-        <option value="TCB">Techcombank</option>
-        <option value="EIB">Eximbank</option>
-        <option value="ACB">ACB</option>
-      </select>
-      <a id="bankLink" href="#" target="_blank" rel="noopener"
-         style="display:inline-block; margin-top:8px; font-size:12.5px; color:var(--accent); font-weight:600;">
-        ↗ Mở trang tỷ giá VietinBank để xem số
-      </a>
-    </div>
-    <div class="manual-pw">
-      <label>Mật khẩu</label>
-      <input type="password" id="manualPw" autocomplete="off" />
-    </div>
-    <div class="manual-row">
-      <span></span><label>Mua TM</label><label>Mua CK</label><label>Bán</label>
-    </div>
-    <div class="manual-row">
-      <label>USD</label>
-      <input type="number" step="any" id="m_USD_muaTm" />
-      <input type="number" step="any" id="m_USD_muaCk" />
-      <input type="number" step="any" id="m_USD_ban" />
-    </div>
-    <div class="manual-row">
-      <label>EUR</label>
-      <input type="number" step="any" id="m_EUR_muaTm" />
-      <input type="number" step="any" id="m_EUR_muaCk" />
-      <input type="number" step="any" id="m_EUR_ban" />
-    </div>
-    <div class="manual-row">
-      <label>JPY</label>
-      <input type="number" step="any" id="m_JPY_muaTm" />
-      <input type="number" step="any" id="m_JPY_muaCk" />
-      <input type="number" step="any" id="m_JPY_ban" />
-    </div>
-    <div class="manual-row">
-      <label>THB</label>
-      <input type="number" step="any" id="m_THB_muaTm" />
-      <input type="number" step="any" id="m_THB_muaCk" />
-      <input type="number" step="any" id="m_THB_ban" />
-    </div>
-    <div class="manual-row">
-      <label>GBP</label>
-      <input type="number" step="any" id="m_GBP_muaTm" />
-      <input type="number" step="any" id="m_GBP_muaCk" />
-      <input type="number" step="any" id="m_GBP_ban" />
-    </div>
-    <div class="manual-row">
-      <label>AUD</label>
-      <input type="number" step="any" id="m_AUD_muaTm" />
-      <input type="number" step="any" id="m_AUD_muaCk" />
-      <input type="number" step="any" id="m_AUD_ban" />
-    </div>
-    <button class="manual-submit" id="manualSubmit">Lưu</button>
-    <div class="manual-msg" id="manualMsg"></div>
-  </div>
 
 </div>
 
@@ -333,167 +439,201 @@
     messagingSenderId: "221466930360",
     appId: "1:221466930360:web:10d3280e243ade104b184d"
   };
-
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
   const CURRENCIES = ["USD", "EUR", "JPY", "THB", "GBP", "AUD"];
-  const BANK_ORDER = ["VCB", "BIDV", "VTB", "AGR", "TCB", "EIB", "TPB", "ACB", "MB"];
-  let currentCurrency = "USD";
-  let latestData = null;
 
-  const fmt = (n) => n === null || n === undefined
-    ? '<span class="na">—</span>'
+  const BANKS = [
+    { code: "VCB",  name: "Vietcombank", url: "https://www.vietcombank.com.vn/vi-VN/KHCN/Cong-cu-Tien-ich/Ty-gia" },
+    { code: "BIDV", name: "BIDV",        url: "https://bidv.com.vn/vn/ty-gia-ngoai-te" },
+    { code: "VTB",  name: "VietinBank",  url: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn" },
+    { code: "AGR",  name: "Agribank",    url: "https://www.agribank.com.vn/vn/ty-gia" },
+    { code: "TCB",  name: "Techcombank", url: "https://techcombank.com/cong-cu-tien-ich/ty-gia" },
+    { code: "EIB",  name: "Eximbank",    url: "https://eximbank.com.vn/bang-ty-gia" },
+    { code: "TPB",  name: "TPBank",      url: "https://tpb.vn/cong-cu-tinh-toan/ty-gia-ngoai-te" },
+    { code: "ACB",  name: "ACB",         url: "https://acb.com.vn/en/exchange-rate" },
+    { code: "MB",   name: "MB",          url: "https://www.mbbank.com.vn/ExchangeRate" },
+  ];
+  const BANK_BY_CODE = {};
+  BANKS.forEach((b) => { BANK_BY_CODE[b.code] = b; });
+
+  let currency = "USD";
+  let data = null;
+
+  const el = (id) => document.getElementById(id);
+  const money = (n) => (n === null || n === undefined)
+    ? null
     : n.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
 
-  function render() {
-    const tbody = document.getElementById("tbody");
-    if (!latestData || !latestData.banks) {
-      tbody.innerHTML = '<tr><td colspan="4" style="padding:28px 16px; color:var(--ink-soft);">Chưa có dữ liệu.</td></tr>';
-      return;
-    }
+  el("picker").innerHTML = CURRENCIES.map((c) =>
+    `<button class="pick" role="tab" data-cur="${c}" aria-selected="${c === currency}">${c}</button>`
+  ).join("");
 
-    const rows = BANK_ORDER
-      .map((code) => ({ code, bank: latestData.banks[code] }))
-      .filter((r) => r.bank && r.bank.rates && r.bank.rates[currentCurrency]);
+  el("picker").addEventListener("click", (e) => {
+    const b = e.target.closest(".pick");
+    if (!b) return;
+    currency = b.dataset.cur;
+    document.querySelectorAll(".pick").forEach((p) =>
+      p.setAttribute("aria-selected", String(p.dataset.cur === currency))
+    );
+    drawBoard();
+  });
 
-    if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="padding:28px 16px; color:var(--ink-soft);">Chưa có dữ liệu cho ' + currentCurrency + '.</td></tr>';
-      return;
-    }
+  function drawBoard() {
+    const banks = (data && data.banks) || {};
 
-    const muaCkVals = rows.map((r) => r.bank.rates[currentCurrency].muaCk).filter((v) => v != null);
-    const banVals = rows.map((r) => r.bank.rates[currentCurrency].ban).filter((v) => v != null);
-    const maxMuaCk = muaCkVals.length ? Math.max(...muaCkVals) : null;
-    const minBan = banVals.length ? Math.min(...banVals) : null;
+    const present = BANKS
+      .map((b) => (banks[b.code] && banks[b.code].rates && banks[b.code].rates[currency]) || null)
+      .filter(Boolean);
 
-    tbody.innerHTML = rows.map(({ code, bank }) => {
-      const r = bank.rates[currentCurrency];
-      const muaCkClass = (maxMuaCk !== null && r.muaCk === maxMuaCk) ? "best" : "";
-      const banClass = (minBan !== null && r.ban === minBan) ? "best" : "";
-      return `<tr>
-        <td class="bank-name">${bank.name}</td>
-        <td class="num">${fmt(r.muaTm)}</td>
-        <td class="num ${muaCkClass}">${fmt(r.muaCk)}</td>
-        <td class="num ${banClass}">${fmt(r.ban)}</td>
-      </tr>`;
+    const ckVals  = present.map((r) => r.muaCk).filter((v) => v != null);
+    const banVals = present.map((r) => r.ban).filter((v) => v != null);
+    const bestCk  = ckVals.length  ? Math.max(...ckVals)  : null;
+    const bestBan = banVals.length ? Math.min(...banVals) : null;
+
+    const head = '<div class="row head">' +
+      '<span>Ngân hàng</span><span>Mua tiền mặt</span><span>Mua chuyển khoản</span><span>Bán</span>' +
+      '</div>';
+
+    const rows = BANKS.map((b) => {
+      const bank = banks[b.code];
+      const r = bank && bank.rates && bank.rates[currency];
+
+      if (!r) {
+        return '<div class="row empty">' +
+          `<span class="bank">${b.name}</span>` +
+          '<span class="val none">—</span><span class="val none">—</span><span class="val none">—</span>' +
+          '</div>';
+      }
+
+      const tag = r.src === "manual" ? '<span class="tag">nhập tay</span>' : "";
+      const cell = (v, best) => {
+        const t = money(v);
+        if (t === null) return '<span class="val none">—</span>';
+        const isTop = best != null && v === best;
+        return `<span class="val${isTop ? " top" : ""}">${t}</span>`;
+      };
+
+      return '<div class="row">' +
+        `<span class="bank">${b.name}${tag}</span>` +
+        cell(r.muaTm, null) + cell(r.muaCk, bestCk) + cell(r.ban, bestBan) +
+        '</div>';
     }).join("");
+
+    el("board").innerHTML = head + rows;
   }
 
-  function renderStatus() {
-    const el = document.getElementById("statusLine");
-    if (!latestData) return;
-    if (latestData.partial && latestData.errors && latestData.errors.length) {
-      el.className = "status-line show warn";
-      el.textContent = `Thiếu dữ liệu ${latestData.errors.length} ngân hàng (${latestData.errors.map(e => e.bank).join(", ")}) — các ngân hàng khác vẫn cập nhật bình thường.`;
+  function drawStamp() {
+    if (!data || !data.updatedAt) { el("stamp").textContent = "Chưa có dữ liệu."; return; }
+    const d = new Date(data.updatedAt);
+    const filled = BANKS.filter((b) => data.banks && data.banks[b.code]).length;
+    el("stamp").innerHTML =
+      `Cập nhật <b>${d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</b>` +
+      ` &nbsp;·&nbsp; ${filled}/${BANKS.length} ngân hàng có số liệu`;
+  }
+
+  function say(kind, text, autohide) {
+    const n = el("notice");
+    n.className = `notice show ${kind}`;
+    n.textContent = text;
+    if (autohide) setTimeout(() => n.classList.remove("show"), 4500);
+  }
+
+  function drawNotice() {
+    if (!data) return;
+    const missing = BANKS.filter((b) => {
+      const bank = data.banks && data.banks[b.code];
+      if (!bank || !bank.rates) return true;
+      return !CURRENCIES.some((c) => bank.rates[c]);
+    });
+    if (missing.length) {
+      say("warn", `Chưa có số liệu: ${missing.map((b) => b.name).join(", ")}. Nhập tay ở cuối trang để bổ sung.`);
     } else {
-      el.className = "status-line show ok";
-      el.textContent = "Tất cả ngân hàng đã cập nhật thành công.";
-      setTimeout(() => el.classList.remove("show"), 4000);
+      say("ok", "Tất cả ngân hàng đã có số liệu.", true);
     }
-  }
-
-  function renderUpdatedAt() {
-    const el = document.getElementById("updatedAt");
-    if (!latestData || !latestData.updatedAt) { el.textContent = "—"; return; }
-    const d = new Date(latestData.updatedAt);
-    el.textContent = "Cập nhật lúc " + d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
   }
 
   db.ref("latest").on("value", (snap) => {
-    latestData = snap.val();
-    render();
-    renderStatus();
-    renderUpdatedAt();
+    data = snap.val();
+    drawBoard();
+    drawStamp();
+    drawNotice();
   });
 
-  document.getElementById("tabs").addEventListener("click", (e) => {
-    const btn = e.target.closest(".tab");
-    if (!btn) return;
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    btn.classList.add("active");
-    currentCurrency = btn.dataset.cur;
-    render();
-  });
-
-  document.getElementById("refreshBtn").addEventListener("click", async () => {
-    const btn = document.getElementById("refreshBtn");
-    const el = document.getElementById("statusLine");
+  el("refreshBtn").addEventListener("click", async () => {
+    const btn = el("refreshBtn");
     btn.disabled = true;
     btn.querySelector("svg").classList.add("spin");
-    el.className = "status-line show ok";
-    el.textContent = "Đang gửi yêu cầu cập nhật…";
-
+    say("ok", "Đang gửi yêu cầu cập nhật…");
     try {
       const res = await fetch("/api/trigger-update", { method: "POST" });
-      const data = await res.json();
-      el.className = "status-line show " + (data.ok ? "ok" : "err");
-      el.textContent = data.message;
+      const out = await res.json();
+      say(out.ok ? "ok" : "err", out.message);
     } catch (err) {
-      el.className = "status-line show err";
-      el.textContent = "Không gửi được yêu cầu — kiểm tra kết nối mạng.";
+      say("err", "Không gửi được yêu cầu. Kiểm tra kết nối mạng rồi thử lại.");
     } finally {
       btn.disabled = false;
       btn.querySelector("svg").classList.remove("spin");
     }
   });
 
-  document.getElementById("manualToggle").addEventListener("click", () => {
-    document.getElementById("manualPanel").classList.toggle("show");
+  el("entryRows").innerHTML = CURRENCIES.map((c) =>
+    '<div class="grid">' +
+    `<label for="m_${c}_muaTm">${c}</label>` +
+    `<input type="number" inputmode="decimal" step="any" id="m_${c}_muaTm" aria-label="${c} mua tiền mặt" />` +
+    `<input type="number" inputmode="decimal" step="any" id="m_${c}_muaCk" aria-label="${c} mua chuyển khoản" />` +
+    `<input type="number" inputmode="decimal" step="any" id="m_${c}_ban" aria-label="${c} bán" />` +
+    '</div>'
+  ).join("");
+
+  el("entryToggle").addEventListener("click", () => {
+    const open = el("entry").classList.toggle("open");
+    el("entryToggle").setAttribute("aria-expanded", String(open));
   });
 
-  const BANK_NAMES = { VTB: "VietinBank", TCB: "Techcombank", EIB: "Eximbank", ACB: "ACB" };
-  const BANK_URLS = {
-    VTB: "https://www.vietinbank.vn/ca-nhan/ty-gia-khcn",
-    TCB: "https://techcombank.com/cong-cu-tien-ich/ty-gia",
-    EIB: "https://eximbank.com.vn/bang-ty-gia",
-    ACB: "https://acb.com.vn/en/exchange-rate",
-  };
-
-  function syncBankLink() {
-    const code = document.getElementById("manualBank").value;
-    const a = document.getElementById("bankLink");
-    a.href = BANK_URLS[code];
-    a.textContent = `↗ Mở trang tỷ giá ${BANK_NAMES[code]} để xem số`;
+  function syncLink() {
+    const b = BANK_BY_CODE[el("manualBank").value];
+    el("srcLink").href = b.url;
+    el("srcLinkText").textContent = `Mở trang tỷ giá ${b.name}`;
   }
-  document.getElementById("manualBank").addEventListener("change", syncBankLink);
-  syncBankLink();
+  el("manualBank").addEventListener("change", syncLink);
+  syncLink();
 
-  document.getElementById("manualSubmit").addEventListener("click", async () => {
-    const msg = document.getElementById("manualMsg");
-    const password = document.getElementById("manualPw").value;
-    const bankCode = document.getElementById("manualBank").value;
-    const bankName = BANK_NAMES[bankCode];
+  el("manualSubmit").addEventListener("click", async () => {
+    const msg = el("manualMsg");
+    const password = el("manualPw").value;
+    const bankCode = el("manualBank").value;
+    const bankName = BANK_BY_CODE[bankCode].name;
+
     if (!password) {
-      msg.style.color = "var(--down)";
-      msg.textContent = "Nhập mật khẩu trước đã.";
+      msg.style.color = "var(--bad)";
+      msg.textContent = "Nhập mật khẩu để lưu.";
       return;
     }
 
     const rates = {};
-    let hasAny = false;
-    for (const code of CURRENCIES) {
-      const muaTm = parseFloat(document.getElementById(`m_${code}_muaTm`).value);
-      const muaCk = parseFloat(document.getElementById(`m_${code}_muaCk`).value);
-      const ban = parseFloat(document.getElementById(`m_${code}_ban`).value);
-      if (!isNaN(muaTm) || !isNaN(muaCk) || !isNaN(ban)) {
-        hasAny = true;
-        rates[code] = {
-          muaTm: isNaN(muaTm) ? null : muaTm,
-          muaCk: isNaN(muaCk) ? null : muaCk,
-          ban: isNaN(ban) ? null : ban,
+    for (const c of CURRENCIES) {
+      const tm = parseFloat(el(`m_${c}_muaTm`).value);
+      const ck = parseFloat(el(`m_${c}_muaCk`).value);
+      const bn = parseFloat(el(`m_${c}_ban`).value);
+      if (!isNaN(tm) || !isNaN(ck) || !isNaN(bn)) {
+        rates[c] = {
+          muaTm: isNaN(tm) ? null : tm,
+          muaCk: isNaN(ck) ? null : ck,
+          ban:   isNaN(bn) ? null : bn,
           banCk: null,
         };
       }
     }
 
-    if (!hasAny) {
-      msg.style.color = "var(--down)";
-      msg.textContent = "Nhập ít nhất 1 loại tiền trước khi lưu.";
+    if (!Object.keys(rates).length) {
+      msg.style.color = "var(--bad)";
+      msg.textContent = "Nhập ít nhất một loại ngoại tệ.";
       return;
     }
 
-    msg.style.color = "var(--ink-soft)";
+    msg.style.color = "var(--ink-2)";
     msg.textContent = "Đang lưu…";
 
     try {
@@ -502,13 +642,20 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password, bankCode, bankName, rates }),
       });
-      const data = await res.json();
-      msg.style.color = data.ok ? "var(--up)" : "var(--down)";
-      msg.textContent = data.message;
-      if (data.ok) document.getElementById("manualPw").value = "";
+      const out = await res.json();
+      msg.style.color = out.ok ? "var(--good)" : "var(--bad)";
+      msg.textContent = out.message;
+      if (out.ok) {
+        el("manualPw").value = "";
+        CURRENCIES.forEach((c) => {
+          el(`m_${c}_muaTm`).value = "";
+          el(`m_${c}_muaCk`).value = "";
+          el(`m_${c}_ban`).value = "";
+        });
+      }
     } catch (err) {
-      msg.style.color = "var(--down)";
-      msg.textContent = "Không gửi được — kiểm tra kết nối mạng.";
+      msg.style.color = "var(--bad)";
+      msg.textContent = "Không gửi được. Kiểm tra kết nối mạng rồi thử lại.";
     }
   });
 </script>
