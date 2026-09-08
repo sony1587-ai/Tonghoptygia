@@ -2,11 +2,12 @@ name: Cập nhật tỷ giá hàng ngày
 
 on:
   schedule:
-    # 01:00 UTC = 08:00 giờ Việt Nam, mỗi ngày
-    - cron: "0 1 * * *"
+    # Giờ UTC. Việt Nam = UTC+7, nên: 01:30→8h30, 04:00→11h, 07:30→14h30.
+    # Chạy 3 lần trong ngày làm việc để bắt được các lần ngân hàng đổi tỷ giá.
+    - cron: "30 1 * * 1-6"
+    - cron: "0 4 * * 1-6"
+    - cron: "30 7 * * 1-6"
   workflow_dispatch: {}
-    # ↑ Cho phép chạy thủ công: từ tab "Actions" trên GitHub (nút "Run workflow"),
-    # hoặc được gọi từ nút "Cập nhật ngay" trên dashboard qua Netlify Function.
 
 jobs:
   scrape-and-update:
