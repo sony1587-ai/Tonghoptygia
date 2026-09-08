@@ -89,8 +89,6 @@ async function scrapeVietcombank() {
   return result;
 }
 
-// API tổng hợp vnappmob — dùng cho ngân hàng không cào trực tiếp được.
-// Mã khoá tự xin mỗi lần chạy nên không cần cấu hình gì thêm.
 async function getVnappmobKey() {
   const res = await fetch("https://api.vnappmob.com/api/request_api_key?scope=exchange_rate", {
     signal: AbortSignal.timeout(15000),
@@ -120,15 +118,15 @@ async function scrapeViaVnappmob(apiCode, apiKey) {
       muaCk: num(row.buy_transfer ?? row.buy),
       ban: num(row.sell),
       banCk: null,
+      src: "api",
     };
   }
-    if (Object.keys(result).length === 0) {
+  if (Object.keys(result).length === 0) {
     throw new Error(
       `API ${apiCode} không trả về loại tiền nào trong ${WANTED.join(", ")} — ` +
       `phản hồi thô (400 ký tự đầu): ${JSON.stringify(data).slice(0, 400)}`
     );
   }
-
   return result;
 }
 
@@ -143,10 +141,50 @@ const BANKS = [
   { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "USD", waitMs: 4000 },
 ];
 
+// Các trang ngân hàng viết số không thống nhất: "25.870", "25,870",
+// "25,870.00", "25.870,00", "161.39". Hàm này suy ra đâu là phân cách hàng
+// nghìn, đâu là dấu thập phân, thay vì đoán mò một kiểu duy nhất.
 function toNumberGeneric(str) {
   if (!str) return null;
-  const n = parseFloat(str.replace(/\./g, "").replace(/,/g, "."));
+  let s = String(str).trim().replace(/\s/g, "");
+  if (!/\d/.test(s)) return null;
+
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+
+  if (lastDot !== -1 && lastComma !== -1) {
+    if (lastDot > lastComma) s = s.replace(/,/g, "");
+    else s = s.replace(/\./g, "").replace(",", ".");
+  } else if (lastDot !== -1 || lastComma !== -1) {
+    const sep = lastDot !== -1 ? "." : ",";
+    const pos = lastDot !== -1 ? lastDot : lastComma;
+    const decimals = s.length - pos - 1;
+    const occurrences = s.split(sep).length - 1;
+    if (decimals === 3 || occurrences > 1) {
+      s = s.split(sep).join("");
+    } else {
+      s = s.replace(sep, ".");
+    }
+  }
+
+  const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
+}
+
+// Khoảng giá trị hợp lý của 1 đơn vị ngoại tệ quy ra VND.
+const BANDS = {
+  USD: [15000, 40000],
+  EUR: [15000, 50000],
+  JPY: [80, 400],
+  THB: [300, 1500],
+  GBP: [20000, 60000],
+  AUD: [10000, 35000],
+};
+
+function inBand(code, v) {
+  const b = BANDS[code];
+  if (!b || v == null) return false;
+  return v >= b[0] && v <= b[1];
 }
 
 function parseBodyText(bodyText, numbersPerRow) {
@@ -166,11 +204,13 @@ function parseBodyText(bodyText, numbersPerRow) {
     let found = false;
     for (const lineIdx of candidateIdxs) {
       const windowText = lines.slice(lineIdx, lineIdx + 8).join(" ");
-      const numberMatches = windowText.match(/[\d]{1,3}(?:[.,]\d{2,3})+|\d+[.,]\d+/g) || [];
-      const nums = numberMatches.map(toNumberGeneric).filter((n) => n !== null && n > 0);
+      const numberMatches = windowText.match(/\d[\d.,]*\d|\d/g) || [];
+      const nums = numberMatches
+        .map(toNumberGeneric)
+        .filter((n) => inBand(code, n));
 
       if (nums.length >= numbersPerRow) {
-        result[code] = { muaTm: nums[0] ?? null, muaCk: nums[1] ?? null, ban: nums[2] ?? null, banCk: nums[3] ?? null };
+        result[code] = { muaTm: nums[0] ?? null, muaCk: nums[1] ?? null, ban: nums[2] ?? null, banCk: nums[3] ?? null, src: "web" };
         found = true;
         break;
       }
@@ -184,8 +224,6 @@ function parseBodyText(bodyText, numbersPerRow) {
   return { result, diagnostics };
 }
 
-// Duyệt đệ quy 1 cấu trúc JSON bất kỳ, tìm các bản ghi trông giống dòng tỷ giá
-// — dùng cho dữ liệu bắt được từ lệnh gọi API ngầm của trang.
 function harvestRatesFromJson(node, out = {}) {
   if (!node || typeof node !== "object") return out;
 
@@ -201,8 +239,8 @@ function harvestRatesFromJson(node, out = {}) {
   if (code && !out[code]) {
     const nums = [];
     for (const v of values) {
-      const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v.replace(/,/g, "")) : NaN;
-      if (Number.isFinite(n) && n > 0) nums.push(n);
+      const n = typeof v === "number" ? v : toNumberGeneric(v);
+      if (inBand(code, n)) nums.push(n);
     }
     if (nums.length >= 2) {
       out[code] = {
@@ -210,6 +248,7 @@ function harvestRatesFromJson(node, out = {}) {
         muaCk: nums[1] ?? null,
         ban: nums[2] ?? nums[1] ?? null,
         banCk: null,
+        src: "xhr",
       };
     }
   }
@@ -242,9 +281,6 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     );
 
-    // Lắng nghe mọi phản hồi JSON mà trang tự gọi ngầm — bảng tỷ giá gốc
-    // (đầy đủ mọi loại tiền) thường nằm ở đây, kể cả khi giao diện chỉ hiển
-    // thị 1-2 loại.
     const apiRates = {};
     page.on("response", async (res) => {
       try {
@@ -273,7 +309,6 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
     let bodyText = await page.evaluate(() => document.body.innerText);
     const parsed = parseBodyText(bodyText, numbersPerRow);
 
-    // Bù các mã còn thiếu bằng dữ liệu bắt được từ lệnh gọi API ngầm.
     for (const code of WANTED) {
       if (!parsed.result[code] && apiRates[code]) {
         parsed.result[code] = apiRates[code];
@@ -282,7 +317,6 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       }
     }
 
-    // Nếu vẫn thiếu, thử bấm chọn đúng mã đó rồi đọc lại giao diện.
     const stillMissing = WANTED.filter((c) => !parsed.result[c]);
     for (const code of stillMissing) {
       let clicked = false;
@@ -306,6 +340,26 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
   } finally {
     await browser.close();
   }
+}
+
+// Đối chiếu với Vietcombank — lệch quá 12% gần như chắc chắn là đọc nhầm ô.
+function crossCheck(bankName, code, rate, reference) {
+  if (!reference) return rate;
+  const ref = reference.muaCk || reference.ban || reference.muaTm;
+  if (!ref) return rate;
+
+  const out = { ...rate };
+  for (const field of ["muaTm", "muaCk", "ban"]) {
+    const v = out[field];
+    if (v == null) continue;
+    const diff = Math.abs(v - ref) / ref;
+    if (diff > 0.12) {
+      console.log(`   ⚠️  ${bankName} ${code}.${field} = ${v} lệch ${(diff * 100).toFixed(0)}% so với VCB (${ref}) — bỏ qua`);
+      out[field] = null;
+    }
+  }
+  if (out.muaTm == null && out.muaCk == null && out.ban == null) return null;
+  return out;
 }
 
 function todayISO() {
@@ -344,7 +398,6 @@ async function run() {
     let rates = {};
     const notes = [];
 
-    // Bước 1: nếu ngân hàng này có nguồn API tổng hợp, ưu tiên lấy ở đó trước.
     if (bank.apiCode && apiKey) {
       try {
         rates = await withTimeout(scrapeViaVnappmob(bank.apiCode, apiKey), 20000, `${bank.bankName} (API)`);
@@ -355,7 +408,6 @@ async function run() {
       }
     }
 
-    // Bước 2: nếu vẫn thiếu, cào trực tiếp trang ngân hàng để bù.
     if (WANTED.some((c) => !rates[c])) {
       try {
         const { result, diagnostics, bodyLength, rawSnippet } =
@@ -372,6 +424,15 @@ async function run() {
       }
     }
 
+    const vcbRates = results.VCB && results.VCB.rates;
+    if (vcbRates) {
+      for (const code of Object.keys(rates)) {
+        const checked = crossCheck(bank.bankName, code, rates[code], vcbRates[code]);
+        if (checked) rates[code] = checked;
+        else delete rates[code];
+      }
+    }
+
     const gotCodes = Object.keys(rates);
     if (gotCodes.length === 0) {
       errors.push({ bank: bank.bankName, error: notes.join(" | ") || "không lấy được dữ liệu" });
@@ -380,6 +441,8 @@ async function run() {
     }
 
     results[bank.bankCode] = { name: bank.bankName, rates };
+    const srcSummary = Object.entries(rates).map(([c, r]) => `${c}:${r.src || "?"}`).join(" ");
+    console.log(`   ↳ nguồn: ${srcSummary}`);
     const missing = WANTED.filter((c) => !rates[c]);
     if (missing.length) {
       console.log(`⚠️  ${bank.bankName}: thiếu ${missing.join(", ")} — vẫn lưu ${gotCodes.join(", ")}`);
