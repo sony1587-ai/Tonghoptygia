@@ -1,9 +1,8 @@
-// Netlify Function nhận dữ liệu nhập tay (dùng cho VietinBank — ngân hàng có
-// màn hình xác minh chống robot nên không tự động cào được), xác thực bằng
-// mật khẩu rồi ghi thẳng vào Firebase bằng Admin SDK.
+// Netlify Function nhận dữ liệu nhập tay, xác thực bằng mật khẩu rồi ghi
+// thẳng vào Firebase bằng Admin SDK.
 //
 // Cần khai báo 3 biến môi trường trên Netlify (Site configuration >
-// Environment variables) — có thể trùng với 2 biến đã dùng cho GitHub Secrets:
+// Environment variables):
 //   FIREBASE_SERVICE_ACCOUNT   - nguyên nội dung file service account .json
 //   FIREBASE_DATABASE_URL      - https://tonghoptygia-default-rtdb.asia-southeast1.firebasedatabase.app
 //   MANUAL_UPDATE_PASSWORD     - mật khẩu tự đặt, chỉ A biết
@@ -55,9 +54,22 @@ exports.handler = async function (event) {
     const db = adminApp.database();
     const date = todayISO();
 
+    // Gộp với dữ liệu đã có thay vì ghi đè toàn bộ — tránh xoá mất các loại
+    // tiền đã có sẵn khi chỉ bổ sung 1-2 loại.
+    const existingSnap = await db.ref(`latest/banks/${bankCode}/rates`).once("value");
+    const existingRates = existingSnap.val() || {};
+
+    // Gắn nhãn nguồn "manual" cho từng loại tiền vừa nhập, giữ nguyên nhãn cũ
+    // của các loại tiền không nhập lần này.
+    const tagged = {};
+    for (const [code, r] of Object.entries(rates)) {
+      tagged[code] = { ...r, src: "manual" };
+    }
+    const mergedRates = { ...existingRates, ...tagged };
+
     const data = {
       name: bankName,
-      rates,
+      rates: mergedRates,
       source: "manual",
       updatedAt: new Date().toISOString(),
     };
