@@ -294,8 +294,6 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     );
 
-    // Lắng nghe mọi phản hồi JSON mà trang tự gọi ngầm — bảng tỷ giá gốc
-    // thường nằm ở đây, kể cả khi giao diện chỉ hiển thị vài loại.
     const apiRates = {};
     page.on("response", async (res) => {
       try {
@@ -308,7 +306,15 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitMs = 3000,
       }
     });
 
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 25000 });
+    // Trang ngân hàng đôi khi tải rất chậm. Thử cách chặt trước (đợi mạng
+    // lắng hẳn); nếu quá hạn thì thử lại theo cách nhẹ hơn — chỉ cần khung
+    // HTML tải xong — rồi dựa vào waitForText phía dưới để chờ bảng hiện ra.
+    try {
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 40000 });
+    } catch (navErr) {
+      console.log(`   ↻ tải lại nhẹ hơn (lần đầu quá hạn)`);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 40000 });
+    }
 
     try {
       await page.waitForFunction(
@@ -441,7 +447,7 @@ async function run() {
     if (WANTED.some((c) => !rates[c])) {
       try {
         const { result, diagnostics, bodyLength, rawSnippet } =
-          await withTimeout(scrapeGenericBankTable(bank), 80000, bank.bankName);
+          await withTimeout(scrapeGenericBankTable(bank), 110000, bank.bankName);
         for (const code of WANTED) {
           if (!rates[code] && result[code]) rates[code] = result[code];
         }
@@ -480,6 +486,7 @@ async function run() {
     const missing = WANTED.filter((c) => !rates[c]);
     if (missing.length) {
       console.log(`⚠️  ${bank.bankName}: thiếu ${missing.join(", ")} — vẫn lưu ${gotCodes.join(", ")}`);
+      if (notes.length) console.log(`   ↳ lý do: ${notes.join(" | ")}`);
       errors.push({ bank: bank.bankName, error: `thiếu ${missing.join(", ")}`, partial: true });
     } else {
       console.log(`✅ ${bank.bankName}: OK`);
