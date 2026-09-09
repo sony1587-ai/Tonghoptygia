@@ -57,10 +57,16 @@ exports.handler = async function (event) {
     const existingSnap = await db.ref(`latest/banks/${bankCode}/rates`).once("value");
     const existingRates = existingSnap.val() || {};
 
-    const tagged = {};
+        const tagged = {};
     for (const [code, r] of Object.entries(rates)) {
-      tagged[code] = { ...r, src: "manual" };
+      const t = { ...r, src: "manual" };
+      // Ngân hàng chỉ niêm yết một giá bán, hoặc người nhập chỉ điền một ô —
+      // điền nốt ô còn lại để bảng không bị trống một nửa.
+      if (t.ban != null && t.banCk == null) t.banCk = t.ban;
+      if (t.banCk != null && t.ban == null) t.ban = t.banCk;
+      tagged[code] = t;
     }
+
     const mergedRates = { ...existingRates, ...tagged };
 
     const data = {
