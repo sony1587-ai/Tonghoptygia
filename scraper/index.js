@@ -125,8 +125,8 @@ async function scrapeViaVnappmob(apiCode, apiKey) {
     result[code] = {
       muaTm: num(row.buy_cash ?? row.buy),
       muaCk: num(row.buy_transfer ?? row.buy),
-      ban: num(row.sell),
-      banCk: null,
+      ban: num(row.sell_cash ?? row.sell),
+      banCk: num(row.sell_transfer ?? row.sell),
       src: "api",
     };
   }
@@ -284,9 +284,13 @@ function harvestRatesFromJson(node, out = {}) {
       if (inBand(code, n)) nums.push(n);
     }
     if (nums.length >= 2) {
-      const candidate = (nums.length >= 3)
-        ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: null, src: "xhr" }
-        : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "xhr" };
+      const candidate = (nums.length >= 4)
+        ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: nums[3], src: "xhr" }
+        : (nums.length === 3)
+          ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: null, src: "xhr" }
+          : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "xhr" };
+      // JSON thường liệt kê cả mệnh giá nhỏ với giá mua thấp hơn. Giữ bản ghi
+      // có giá mua cao nhất — đó là mệnh giá lớn / loại "USD" thông thường.
       const prev = out[code];
       const score = (r) => Math.max(r.muaTm || 0, r.muaCk || 0);
       if (!prev || score(candidate) > score(prev)) out[code] = candidate;
@@ -391,236 +395,4 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence
       bodyText = await page.evaluate(() => document.body.innerText);
       const reparsed = parseBodyText(bodyText, numbersPerRow);
       if (reparsed.result[code]) {
-        parsed.result[code] = reparsed.result[code];
-        if (reparsed.picked && reparsed.picked[code]) parsed.picked[code] = reparsed.picked[code];
-        const idx = parsed.diagnostics.findIndex((d) => d.startsWith(`${code}:`));
-        if (idx !== -1) parsed.diagnostics.splice(idx, 1);
-      }
-    }
-
-    return { ...parsed, bodyLength: bodyText.length, rawSnippet: bodyText.slice(0, 400) };
-  } finally {
-    await browser.close();
-  }
-}
-
-// Ngân hàng luôn bán cao hơn mua. Sắp xếp lại 3 giá trị tăng dần để sửa các
-// trường hợp đọc lệch thứ tự cột.
-function normalizeRate(rate) {
-  if (!rate) return rate;
-  const fields = ["muaTm", "muaCk", "ban"];
-  const present = fields.filter((f) => rate[f] != null);
-  if (present.length < 2) return rate;
-
-  const sorted = present.map((f) => rate[f]).sort((a, b) => a - b);
-  const out = { ...rate };
-  present.forEach((f, i) => { out[f] = sorted[i]; });
-
-  // Chênh lệch mua–bán bằng 0 nghĩa là đọc trùng ô. Bỏ giá mua, giữ giá bán.
-  if (out.muaCk != null && out.ban != null && out.muaCk === out.ban) out.muaCk = null;
-  if (out.muaTm != null && out.ban != null && out.muaTm === out.ban) out.muaTm = null;
-  return out;
-}
-
-// Đối chiếu với Vietcombank — lệch quá 12% gần như chắc chắn là đọc nhầm ô.
-function crossCheck(bankName, code, rate, reference) {
-  if (!reference) return rate;
-  const ref = reference.muaCk || reference.ban || reference.muaTm;
-  if (!ref) return rate;
-
-  const out = { ...rate };
-  for (const field of ["muaTm", "muaCk", "ban"]) {
-    const v = out[field];
-    if (v == null) continue;
-    const diff = Math.abs(v - ref) / ref;
-    if (diff > 0.12) {
-      console.log(`   ⚠️  ${bankName} ${code}.${field} = ${v} lệch ${(diff * 100).toFixed(0)}% so với VCB (${ref}) — bỏ qua`);
-      out[field] = null;
-    }
-  }
-  if (out.muaTm == null && out.muaCk == null && out.ban == null) return null;
-  return out;
-}
-
-// Xoá dữ liệu lịch sử cũ hơn số ngày giữ lại, để cơ sở dữ liệu không phình
-// vô hạn. Firebase gói miễn phí đủ dùng thoải mái với 3 tháng dữ liệu.
-const KEEP_DAYS = 92;
-
-async function pruneOldHistory(db, todayStr) {
-  const cutoff = new Date(todayStr);
-  cutoff.setDate(cutoff.getDate() - KEEP_DAYS);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-  const removals = {};
-  let count = 0;
-
-  // Nhánh /rates (bản đầy đủ theo ngày)
-  const ratesSnap = await db.ref("rates").orderByKey().endAt(cutoffStr).once("value");
-  ratesSnap.forEach((child) => { removals[`rates/${child.key}`] = null; count++; });
-
-  // Nhánh /history (bản gọn để vẽ biểu đồ), lưu theo từng loại ngoại tệ
-  for (const cur of WANTED) {
-    const hSnap = await db.ref(`history/${cur}`).orderByKey().endAt(cutoffStr).once("value");
-    hSnap.forEach((child) => { removals[`history/${cur}/${child.key}`] = null; count++; });
-  }
-
-  if (count) {
-    await db.ref().update(removals);
-    console.log(`🧹 Đã xoá ${count} mục dữ liệu cũ hơn ${cutoffStr}`);
-  }
-}
-
-function todayISO() {
-  const now = new Date();
-  const vnMs = now.getTime() + (7 * 60 - now.getTimezoneOffset()) * 60000;
-  return new Date(vnMs).toISOString().slice(0, 10);
-}
-
-async function run() {
-  const adminApp = initFirebase();
-  const db = adminApp.database();
-  const date = todayISO();
-
-  const results = {};
-  const errors = [];
-
-  console.log("Bắt đầu: Vietcombank");
-  try {
-    results.VCB = {
-      name: "Vietcombank",
-      rates: await withTimeout(scrapeVietcombank(), 20000, "Vietcombank"),
-      date,
-      updatedAt: new Date().toISOString(),
-    };
-    console.log("✅ Vietcombank: OK");
-  } catch (err) {
-    errors.push({ bank: "Vietcombank", error: err.message });
-    console.error(`❌ Vietcombank: ${err.message}`);
-  }
-
-  let apiKey = null;
-  try {
-    apiKey = await withTimeout(getVnappmobKey(), 15000, "vnappmob key");
-    console.log("Đã lấy được api_key vnappmob (chỉ dùng làm nguồn phụ)");
-  } catch (err) {
-    console.error(`⚠️  Không lấy được api_key vnappmob: ${err.message}`);
-  }
-
-  for (const bank of BANKS) {
-    console.log(`Bắt đầu: ${bank.bankName}`);
-    let rates = {};
-    const notes = [];
-
-    // BƯỚC 1 — Nguồn chính: trang tỷ giá do chính ngân hàng công bố.
-    try {
-      const { result, diagnostics, bodyLength, rawSnippet, picked } =
-        await withTimeout(scrapeGenericBankTable(bank), 110000, bank.bankName);
-      if (picked) {
-        for (const [c, txt] of Object.entries(picked)) {
-          console.log(`   · ${c} đọc từ: "${txt}"`);
-        }
-      }
-      rates = result;
-      if (WANTED.some((c) => !rates[c])) {
-        notes.push(`cào trực tiếp (trang ${bodyLength} ký tự): ${diagnostics.join(" || ")}`);
-        if (Object.keys(result).length === 0 && rawSnippet) notes.push(`nội dung trang: "${rawSnippet}"`);
-      }
-    } catch (err) {
-      notes.push(`cào trực tiếp: ${err.message}`);
-      console.error(`   ↳ cào trang lỗi: ${err.message}`);
-    }
-
-    // BƯỚC 2 — Chỉ khi trang chính thức còn thiếu loại tiền nào mới lấy API
-    // tổng hợp bên thứ ba bù vào, và đánh dấu riêng để người xem biết.
-    const missingAfterWeb = WANTED.filter((c) => !rates[c]);
-    if (missingAfterWeb.length && bank.apiCode && apiKey) {
-      try {
-        const apiRates = await withTimeout(scrapeViaVnappmob(bank.apiCode, apiKey), 20000, `${bank.bankName} (API)`);
-        const filled = [];
-        for (const code of missingAfterWeb) {
-          if (apiRates[code]) { rates[code] = apiRates[code]; filled.push(code); }
-        }
-        if (filled.length) console.log(`   ↳ API vnappmob bù thêm: ${filled.join(", ")}`);
-      } catch (err) {
-        notes.push(`API: ${err.message}`);
-        console.error(`   ↳ API vnappmob lỗi: ${err.message}`);
-      }
-    }
-
-    // Chuẩn hoá thứ tự mua/bán, rồi đối chiếu với Vietcombank.
-    for (const code of Object.keys(rates)) {
-      rates[code] = normalizeRate(rates[code]);
-    }
-    const vcbRates = results.VCB && results.VCB.rates;
-    if (vcbRates) {
-      for (const code of Object.keys(rates)) {
-        const checked = crossCheck(bank.bankName, code, rates[code], vcbRates[code]);
-        if (checked) rates[code] = checked;
-        else delete rates[code];
-      }
-    }
-
-    const gotCodes = Object.keys(rates);
-    if (gotCodes.length === 0) {
-      errors.push({ bank: bank.bankName, error: notes.join(" | ") || "không lấy được dữ liệu" });
-      console.error(`❌ ${bank.bankName}: ${notes.join(" | ")}`);
-      continue;
-    }
-
-    results[bank.bankCode] = { name: bank.bankName, rates, date, updatedAt: new Date().toISOString() };
-    const srcSummary = Object.entries(rates).map(([c, r]) => `${c}:${r.src || "?"}`).join(" ");
-    console.log(`   ↳ nguồn: ${srcSummary}`);
-    const missing = WANTED.filter((c) => !rates[c]);
-    if (missing.length) {
-      console.log(`⚠️  ${bank.bankName}: thiếu ${missing.join(", ")} — vẫn lưu ${gotCodes.join(", ")}`);
-      if (notes.length) console.log(`   ↳ lý do: ${notes.join(" | ")}`);
-      errors.push({ bank: bank.bankName, error: `thiếu ${missing.join(", ")}`, partial: true });
-    } else {
-      console.log(`✅ ${bank.bankName}: OK`);
-    }
-  }
-
-  if (Object.keys(results).length === 0) {
-    throw new Error("Không lấy được dữ liệu từ bất kỳ ngân hàng nào — dừng, không ghi đè dữ liệu cũ.");
-  }
-
-  const updates = {};
-  for (const [code, data] of Object.entries(results)) {
-    updates[`rates/${date}/${code}`] = data;
-    updates[`latest/banks/${code}`] = data;
-
-    // Bản gọn cho biểu đồ: /history/{ngoại tệ}/{ngày}/{mã NH} = {tm, ck, b}.
-    // Tách theo ngoại tệ để khi vẽ biểu đồ chỉ tải đúng loại đang xem, thay vì
-    // kéo cả kho dữ liệu về máy.
-    for (const [cur, r] of Object.entries(data.rates)) {
-      updates[`history/${cur}/${date}/${code}`] = {
-        tm: r.muaTm ?? null,
-        ck: r.muaCk ?? null,
-        b: r.ban ?? null,
-      };
-    }
-  }
-  updates["latest/date"] = date;
-  updates["latest/updatedAt"] = new Date().toISOString();
-  updates["latest/partial"] = errors.length > 0;
-  updates["latest/errors"] = errors;
-
-  await db.ref().update(updates);
-
-  try {
-    await pruneOldHistory(db, date);
-  } catch (err) {
-    console.error(`⚠️  Dọn dữ liệu cũ thất bại (không ảnh hưởng dữ liệu hôm nay): ${err.message}`);
-  }
-
-  console.log(`\nGhi Firebase xong: ${Object.keys(results).length}/${BANKS.length + 1} ngân hàng thành công.`);
-  if (errors.length) {
-    console.log("Các ngân hàng lỗi (cần hiệu chỉnh):");
-    for (const e of errors) console.log(`  - ${e.bank}: ${e.error}`);
-  }
-}
-
-run().catch((err) => {
-  console.error("LỖI NGHIÊM TRỌNG:", err);
-  process.exit(1);
-});
+        parsed.result
