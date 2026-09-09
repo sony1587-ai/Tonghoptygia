@@ -148,7 +148,7 @@ const BANKS = [
   { bankCode: "EIB", bankName: "Eximbank", url: "https://eximbank.com.vn/bang-ty-gia", waitForText: "USD", waitMs: 6000 },
   { bankCode: "TPB", bankName: "TPBank", url: "https://tpb.vn/cong-cu-tinh-toan/ty-gia-ngoai-te", waitForText: "USD", waitMs: 4000 },
   { bankCode: "ACB", bankName: "ACB", url: "https://acb.com.vn/en/exchange-rate", waitForText: "USD", waitMs: 9000 },
-  { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "MUA VÀO", waitForAbsence: "***", waitMs: 8000 },
+  { bankCode: "MB", bankName: "MB", url: "https://www.mbbank.com.vn/ExchangeRate", waitForText: "MUA VÀO", waitForAbsence: "***", waitMs: 10000 },
 ];
 
 // Các trang ngân hàng viết số không thống nhất: "25.870", "25,870",
@@ -381,6 +381,17 @@ async function scrapeGenericBankTable({ url, waitForText = "USD", waitForAbsence
       } catch {
         console.log(`   ⏳ vẫn còn khung mẫu chưa điền số sau 20s`);
       }
+    }
+    // Dấu hiệu chắc chắn nhất cho biết bảng đã có số: trên trang xuất hiện một
+    // con số dạng tỷ giá (vd 25.780 hoặc 25,780). Chờ tiêu đề cột hay ký hiệu
+    // khung mẫu đều không đủ — chúng hiện ra trước khi dữ liệu kịp đổ vào.
+    try {
+      await page.waitForFunction(
+        () => /\d{2}[.,]\d{3}/.test(document.body ? document.body.innerText : ""),
+        { timeout: 20000 }
+      );
+    } catch {
+      console.log(`   ⏳ chưa thấy con số tỷ giá nào sau 20s`);
     }
 
     await new Promise((r) => setTimeout(r, waitMs));
