@@ -197,6 +197,15 @@ function inBand(code, v) {
   return v >= b[0] && v <= b[1];
 }
 
+// Cửa sổ quét thường lấn sang dòng ngoại tệ kế tiếp, nên con số thứ 4 nhiều
+// khi không phải "giá bán thứ hai" mà là số của dòng khác. Chỉ chấp nhận nó
+// nếu chênh lệch với giá bán không quá 3% — hai giá bán tiền mặt và chuyển
+// khoản của cùng một ngân hàng luôn sát nhau.
+function looksLikeSecondSell(v, sell) {
+  if (v == null || sell == null) return false;
+  return Math.abs(v - sell) / sell <= 0.03;
+}
+
 // Nhiều ngân hàng tách USD theo mệnh giá tờ tiền: USD(1,2) / USD(5,10,20) /
 // USD(50,100), giá mua tờ nhỏ thấp hơn hẳn. Dòng cần lấy là mệnh giá lớn nhất
 // (hoặc dòng "USD" trơn). Trả về số càng nhỏ càng ưu tiên.
@@ -247,7 +256,13 @@ function parseBodyText(bodyText, numbersPerRow) {
 
         if (nums.length >= minNums) {
           result[code] = (nums.length >= 3)
-            ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: nums[3] ?? null, src: "web" }
+            ? {
+                muaTm: nums[0],
+                muaCk: nums[1],
+                ban: nums[2],
+                banCk: looksLikeSecondSell(nums[3], nums[2]) ? nums[3] : null,
+                src: "web",
+              }
             : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "web2" };
           picked[code] = `${lines[lineIdx].slice(0, 45)} → ${nums.slice(0, 4).join(" | ")}`;
           found = true;
@@ -284,9 +299,9 @@ function harvestRatesFromJson(node, out = {}) {
       if (inBand(code, n)) nums.push(n);
     }
     if (nums.length >= 2) {
-      const candidate = (nums.length >= 4)
+      const candidate = (nums.length >= 4 && looksLikeSecondSell(nums[3], nums[2]))
         ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: nums[3], src: "xhr" }
-        : (nums.length === 3)
+        : (nums.length >= 3)
           ? { muaTm: nums[0], muaCk: nums[1], ban: nums[2], banCk: null, src: "xhr" }
           : { muaTm: null, muaCk: nums[0], ban: nums[1], banCk: null, src: "xhr" };
       // JSON thường liệt kê cả mệnh giá nhỏ với giá mua thấp hơn. Giữ bản ghi
@@ -466,11 +481,9 @@ async function pruneOldHistory(db, todayStr) {
   const removals = {};
   let count = 0;
 
-  // Nhánh /rates (bản đầy đủ theo ngày)
   const ratesSnap = await db.ref("rates").orderByKey().endAt(cutoffStr).once("value");
   ratesSnap.forEach((child) => { removals[`rates/${child.key}`] = null; count++; });
 
-  // Nhánh /history (bản gọn để vẽ biểu đồ), lưu theo từng loại ngoại tệ
   for (const cur of WANTED) {
     const hSnap = await db.ref(`history/${cur}`).orderByKey().endAt(cutoffStr).once("value");
     hSnap.forEach((child) => { removals[`history/${cur}/${child.key}`] = null; count++; });
@@ -498,12 +511,11 @@ async function run() {
 
   console.log("Bắt đầu: Vietcombank");
   try {
-    results.VCB = {
-      name: "Vietcombank",
-      rates: await withTimeout(scrapeVietcombank(), 20000, "Vietcombank"),
-      date,
-      updatedAt: new Date().toISOString(),
-    };
+    const vcb = await withTimeout(scrapeVietcombank(), 20000, "Vietcombank");
+    // Vietcombank chạy riêng ngoài vòng lặp nên phải tự gọi chuẩn hoá, nếu
+    // không cột bán chuyển khoản sẽ bỏ trống.
+    for (const code of Object.keys(vcb)) vcb[code] = normalizeRate(vcb[code]);
+    results.VCB = { name: "Vietcombank", rates: vcb, date, updatedAt: new Date().toISOString() };
     console.log("✅ Vietcombank: OK");
   } catch (err) {
     errors.push({ bank: "Vietcombank", error: err.message });
@@ -567,8 +579,12 @@ async function run() {
     if (vcbRates) {
       for (const code of Object.keys(rates)) {
         const checked = crossCheck(bank.bankName, code, rates[code], vcbRates[code]);
-        if (checked) rates[code] = checked;
-        else delete rates[code];
+        if (!checked) { delete rates[code]; continue; }
+        // Bước đối chiếu có thể đã loại một trong hai cột bán — điền lại từ
+        // cột còn tốt để bảng không bị trống một nửa.
+        if (checked.ban == null && checked.banCk != null) checked.ban = checked.banCk;
+        if (checked.banCk == null && checked.ban != null) checked.banCk = checked.ban;
+        rates[code] = checked;
       }
     }
 
@@ -602,7 +618,6 @@ async function run() {
     updates[`latest/banks/${code}`] = data;
 
     // Bản gọn cho biểu đồ: /history/{ngoại tệ}/{ngày}/{mã NH}.
-    // Tách theo ngoại tệ để khi vẽ biểu đồ chỉ tải đúng loại đang xem.
     for (const [cur, r] of Object.entries(data.rates)) {
       updates[`history/${cur}/${date}/${code}`] = {
         tm: r.muaTm ?? null,
