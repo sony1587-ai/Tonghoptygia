@@ -259,6 +259,112 @@
     vertical-align: 2px;
   }
 
+  /* Chuyển giữa Bảng và Biểu đồ */
+  .views {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .viewbtn {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .viewbtn[aria-pressed="true"] {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: #fff;
+  }
+  .viewbtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  .panel { display: none; }
+  .panel.on { display: block; }
+
+  .ctrls {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .ctrl-row { margin-bottom: 12px; }
+  .ctrl-row:last-child { margin-bottom: 0; }
+  .ctrl-row > span.lbl {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 6px 11px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .chip[aria-pressed="true"] {
+    background: var(--brand-tint);
+    border-color: var(--brand);
+    color: var(--brand);
+    font-weight: 600;
+  }
+  .chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .dates input {
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--surface);
+  }
+  .dates span { font-size: 12.5px; color: var(--ink-2); }
+
+  .chartbox {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 10px 10px;
+  }
+  .chartbox svg { width: 100%; height: auto; display: block; }
+  .chart-msg {
+    padding: 30px 14px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-2);
+    line-height: 1.7;
+  }
+  .keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 6px 2px;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .keys i {
+    display: inline-block;
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
   .legend {
     font-size: 11.5px;
     color: var(--ink-2);
@@ -424,8 +530,14 @@
 
   <div class="notice" id="notice" role="status"></div>
 
+  <div class="views">
+    <button class="viewbtn" id="vTable" aria-pressed="true">Bảng tỷ giá</button>
+    <button class="viewbtn" id="vChart" aria-pressed="false">Biểu đồ theo thời gian</button>
+  </div>
+
   <div class="picker" id="picker" role="tablist" aria-label="Chọn ngoại tệ"></div>
 
+  <div class="panel on" id="panelTable">
   <div class="toolbar">
     <label for="sortBy">Sắp xếp</label>
     <select id="sortBy">
@@ -446,6 +558,43 @@
     Ngân hàng chưa có số bấm "lấy số" để mở trang tỷ giá và nhập vào.
     Nhãn "nguồn phụ" là số lấy từ dịch vụ tổng hợp bên ngoài do trang ngân hàng không đọc được — nên đối chiếu lại khi cần chính xác.
   </p>
+  </div>
+
+  <div class="panel" id="panelChart">
+    <div class="ctrls">
+      <div class="ctrl-row">
+        <span class="lbl">Chỉ số</span>
+        <div class="chips" id="metricChips">
+          <button class="chip" data-m="tm" aria-pressed="false">Mua tiền mặt</button>
+          <button class="chip" data-m="ck" aria-pressed="true">Mua chuyển khoản</button>
+          <button class="chip" data-m="b" aria-pressed="false">Bán</button>
+        </div>
+      </div>
+      <div class="ctrl-row">
+        <span class="lbl">Ngân hàng so sánh (đường trung bình thị trường luôn hiển thị)</span>
+        <div class="chips" id="bankChips"></div>
+      </div>
+      <div class="ctrl-row">
+        <span class="lbl">Khoảng thời gian</span>
+        <div class="chips" id="rangeChips">
+          <button class="chip" data-d="7" aria-pressed="true">7 ngày</button>
+          <button class="chip" data-d="30" aria-pressed="false">30 ngày</button>
+          <button class="chip" data-d="90" aria-pressed="false">90 ngày</button>
+        </div>
+        <div class="dates" style="margin-top:8px;">
+          <span>hoặc từ</span>
+          <input type="date" id="dFrom" />
+          <span>đến</span>
+          <input type="date" id="dTo" />
+        </div>
+      </div>
+    </div>
+
+    <div class="chartbox">
+      <div id="chartArea"><div class="chart-msg">Chọn ngân hàng để xem biểu đồ.</div></div>
+      <div class="keys" id="chartKeys"></div>
+    </div>
+  </div>
 
   <section class="entry" id="entry">
     <button class="entry-head" id="entryToggle" aria-expanded="false" aria-controls="entryBody">
@@ -552,6 +701,7 @@
       p.setAttribute("aria-selected", String(p.dataset.cur === currency))
     );
     drawBoard();
+    if (el("panelChart").classList.contains("on")) drawChart();
   });
 
   function drawBoard() {
@@ -734,6 +884,205 @@
   }
   el("manualBank").addEventListener("change", syncLink);
   syncLink();
+
+  // ==========================================================================
+  // BIỂU ĐỒ THEO THỜI GIAN
+  // Dữ liệu đọc từ nhánh /history/{ngoại tệ}/{ngày}/{mã NH} — nhánh này lưu
+  // gọn (chỉ 3 con số mỗi ngân hàng) nên tải nhanh kể cả 90 ngày.
+  // ==========================================================================
+  const LINE_COLORS = ["#1B4B73", "#0B7A5A", "#9A6208", "#7A3E9D", "#A32B22", "#0F7FA8", "#5C6B7A"];
+  const METRIC_LABEL = { tm: "Mua tiền mặt", ck: "Mua chuyển khoản", b: "Bán" };
+
+  let metric = "ck";
+  let pickedBanks = ["STB"];   // mặc định: ngân hàng của mình
+  let rangeDays = 7;
+  let customFrom = null, customTo = null;
+  let histCache = {};
+
+  function isoDaysAgo(n) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function currentRange() {
+    if (customFrom && customTo && customFrom <= customTo) return [customFrom, customTo];
+    return [isoDaysAgo(rangeDays - 1), isoDaysAgo(0)];
+  }
+
+  el("bankChips").innerHTML = BANKS.map((b) =>
+    `<button class="chip" data-b="${b.code}" aria-pressed="${pickedBanks.includes(b.code)}">${b.name}</button>`
+  ).join("");
+
+  function wireChips(containerId, onPick, multi) {
+    el(containerId).addEventListener("click", (e) => {
+      const c = e.target.closest(".chip");
+      if (!c) return;
+      if (multi) {
+        c.setAttribute("aria-pressed", c.getAttribute("aria-pressed") === "true" ? "false" : "true");
+      } else {
+        el(containerId).querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", "false"));
+        c.setAttribute("aria-pressed", "true");
+      }
+      onPick(c);
+    });
+  }
+
+  wireChips("metricChips", (c) => { metric = c.dataset.m; drawChart(); }, false);
+  wireChips("rangeChips", (c) => {
+    rangeDays = parseInt(c.dataset.d, 10);
+    customFrom = customTo = null;
+    el("dFrom").value = ""; el("dTo").value = "";
+    drawChart();
+  }, false);
+  wireChips("bankChips", () => {
+    pickedBanks = [...el("bankChips").querySelectorAll('.chip[aria-pressed="true"]')].map((x) => x.dataset.b);
+    drawChart();
+  }, true);
+
+  function onDateChange() {
+    customFrom = el("dFrom").value || null;
+    customTo = el("dTo").value || null;
+    if (customFrom && customTo) {
+      el("rangeChips").querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", "false"));
+      drawChart();
+    }
+  }
+  el("dFrom").addEventListener("change", onDateChange);
+  el("dTo").addEventListener("change", onDateChange);
+
+  async function loadHistory(cur, from, to) {
+    const key = `${cur}|${from}|${to}`;
+    if (histCache[key]) return histCache[key];
+    const snap = await db.ref(`history/${cur}`).orderByKey().startAt(from).endAt(to).once("value");
+    const val = snap.val() || {};
+    histCache[key] = val;
+    return val;
+  }
+
+  async function drawChart() {
+    const area = el("chartArea");
+    const keys = el("chartKeys");
+    const [from, to] = currentRange();
+
+    area.innerHTML = '<div class="chart-msg">Đang tải dữ liệu…</div>';
+    keys.innerHTML = "";
+
+    let hist;
+    try {
+      hist = await loadHistory(currency, from, to);
+    } catch (err) {
+      area.innerHTML = '<div class="chart-msg">Không tải được dữ liệu lịch sử.</div>';
+      return;
+    }
+
+    const dates = Object.keys(hist).sort();
+    if (dates.length < 2) {
+      area.innerHTML = `<div class="chart-msg">Chưa đủ dữ liệu lịch sử cho khoảng này.<br>
+        Dữ liệu bắt đầu tích luỹ từ ngày hệ thống chạy lần đầu, mỗi ngày thêm một điểm.</div>`;
+      return;
+    }
+
+    const series = [];
+    pickedBanks.forEach((code, i) => {
+      const bank = BANK_BY_CODE[code];
+      if (!bank) return;
+      series.push({
+        name: bank.name,
+        color: LINE_COLORS[i % LINE_COLORS.length],
+        dash: null,
+        vals: dates.map((dt) => {
+          const rec = hist[dt] && hist[dt][code];
+          return rec && rec[metric] != null ? rec[metric] : null;
+        }),
+      });
+    });
+
+    // Trung bình thị trường: bình quân tất cả ngân hàng có số trong ngày đó
+    series.push({
+      name: "TB thị trường",
+      color: "#8A96A8",
+      dash: "5 4",
+      vals: dates.map((dt) => {
+        const day = hist[dt] || {};
+        const nums = Object.values(day).map((r) => r && r[metric]).filter((v) => v != null);
+        return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+      }),
+    });
+
+    const all = series.flatMap((s) => s.vals).filter((v) => v != null);
+    if (!all.length) {
+      area.innerHTML = '<div class="chart-msg">Ngân hàng đã chọn chưa có số liệu trong khoảng này.</div>';
+      return;
+    }
+
+    const W = 700, H = 320, ML = 62, MR = 12, MT = 14, MB = 42;
+    const iw = W - ML - MR, ih = H - MT - MB;
+    let lo = Math.min(...all), hi = Math.max(...all);
+    if (lo === hi) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.12;
+    lo -= pad; hi += pad;
+
+    const x = (i) => ML + (dates.length === 1 ? iw / 2 : (i * iw) / (dates.length - 1));
+    const y = (v) => MT + ih - ((v - lo) / (hi - lo)) * ih;
+
+    const fmtY = (v) => v >= 1000
+      ? Math.round(v).toLocaleString("vi-VN")
+      : v.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+
+    let grid = "";
+    for (let g = 0; g <= 4; g++) {
+      const v = lo + ((hi - lo) * g) / 4;
+      const yy = y(v);
+      grid += `<line x1="${ML}" y1="${yy}" x2="${W - MR}" y2="${yy}" stroke="#EFF2F6" stroke-width="1"/>`;
+      grid += `<text x="${ML - 8}" y="${yy + 4}" text-anchor="end" font-size="11" fill="#8A96A8" font-family="IBM Plex Mono, monospace">${fmtY(v)}</text>`;
+    }
+
+    let xlab = "";
+    const step = Math.max(1, Math.ceil(dates.length / 5));
+    dates.forEach((dt, i) => {
+      if (i % step !== 0 && i !== dates.length - 1) return;
+      const p = dt.split("-");
+      xlab += `<text x="${x(i)}" y="${H - 16}" text-anchor="middle" font-size="11" fill="#8A96A8" font-family="IBM Plex Mono, monospace">${p[2]}/${p[1]}</text>`;
+    });
+
+    let paths = "";
+    for (const s of series) {
+      let dAttr = "", started = false;
+      s.vals.forEach((v, i) => {
+        if (v == null) { started = false; return; }
+        dAttr += (started ? " L" : " M") + `${x(i).toFixed(1)} ${y(v).toFixed(1)}`;
+        started = true;
+      });
+      if (!dAttr) continue;
+      paths += `<path d="${dAttr.trim()}" fill="none" stroke="${s.color}" stroke-width="2.2"
+        stroke-linejoin="round" stroke-linecap="round"${s.dash ? ` stroke-dasharray="${s.dash}"` : ""}/>`;
+      s.vals.forEach((v, i) => {
+        if (v != null && dates.length <= 31) {
+          paths += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.6" fill="${s.color}"/>`;
+        }
+      });
+    }
+
+    area.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="Biểu đồ ${METRIC_LABEL[metric]} ${currency} từ ${from} đến ${to}">
+      ${grid}${paths}${xlab}
+    </svg>`;
+
+    keys.innerHTML = series.map((s) =>
+      `<span><i style="background:${s.color}"></i>${s.name}</span>`
+    ).join("") + `<span style="margin-left:auto">${METRIC_LABEL[metric]} · ${currency}</span>`;
+  }
+
+  function setView(chart) {
+    el("vTable").setAttribute("aria-pressed", String(!chart));
+    el("vChart").setAttribute("aria-pressed", String(chart));
+    el("panelTable").classList.toggle("on", !chart);
+    el("panelChart").classList.toggle("on", chart);
+    if (chart) drawChart();
+  }
+  el("vTable").addEventListener("click", () => setView(false));
+  el("vChart").addEventListener("click", () => setView(true));
 
   el("manualSubmit").addEventListener("click", async () => {
     const msg = el("manualMsg");
