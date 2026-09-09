@@ -145,7 +145,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: minmax(94px, 1.5fr) repeat(3, minmax(62px, 1fr));
+    grid-template-columns: minmax(88px, 1.35fr) repeat(4, minmax(56px, 1fr));
     gap: 6px;
     align-items: center;
     padding: 11px 14px;
@@ -186,6 +186,9 @@
     color: var(--warn);
   }
   .tag.old { background: #FDECEA; color: var(--bad); }
+  .staleRow { background: #FFFBF5; }
+  .staleRow .val { color: var(--ink-3); font-weight: 400; }
+  .staleRow .bank { color: var(--ink-2); }
   .tag.api { background: #EEF0F4; color: var(--ink-2); }
   .clock {
     font-family: 'IBM Plex Mono', monospace;
@@ -193,8 +196,6 @@
     color: var(--ink-3);
     font-weight: 500;
   }
-  .staleRow { background: #FFFBF5; }
-  .val.stale { color: var(--ink-3); }
 
   .getlink {
     font-size: 11px;
@@ -444,7 +445,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: 46px repeat(3, 1fr);
+    grid-template-columns: 42px repeat(4, 1fr);
     gap: 7px;
     align-items: center;
     margin-bottom: 7px;
@@ -464,11 +465,11 @@
   }
   .grid input {
     width: 100%;
-    padding: 8px 7px;
+    padding: 8px 5px;
     border: 1px solid var(--line);
     border-radius: 6px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 13px;
+    font-size: 12.5px;
     text-align: right;
     background: var(--surface);
     color: var(--ink);
@@ -506,9 +507,10 @@
   @media (max-width: 560px) {
     .masthead { flex-direction: column; align-items: stretch; }
     .btn { justify-content: center; }
-    .row { padding: 10px 11px; gap: 4px; }
-    .val { font-size: 12.5px; }
-    .bank { font-size: 13px; }
+    .row { padding: 10px 8px; gap: 3px; }
+    .val { font-size: 11.5px; }
+    .bank { font-size: 12.5px; }
+    .row.head span { font-size: 10px; }
   }
 </style>
 </head>
@@ -544,8 +546,10 @@
       <option value="default">Theo thứ tự ngân hàng</option>
       <option value="muaCk-desc">Mua chuyển khoản: cao → thấp</option>
       <option value="muaCk-asc">Mua chuyển khoản: thấp → cao</option>
-      <option value="ban-asc">Bán ra: thấp → cao</option>
-      <option value="ban-desc">Bán ra: cao → thấp</option>
+      <option value="banCk-asc">Bán chuyển khoản: thấp → cao</option>
+      <option value="banCk-desc">Bán chuyển khoản: cao → thấp</option>
+      <option value="ban-asc">Bán tiền mặt: thấp → cao</option>
+      <option value="ban-desc">Bán tiền mặt: cao → thấp</option>
       <option value="muaTm-desc">Mua tiền mặt: cao → thấp</option>
     </select>
   </div>
@@ -553,9 +557,9 @@
   <div class="board" id="board"></div>
 
   <p class="legend">
-    Ô <span class="sw">tô xanh ▲</span> là mua chuyển khoản cao nhất và bán ra thấp nhất trong ngày.
+    Ô <span class="sw">tô xanh ▲</span> là mua chuyển khoản cao nhất và giá bán thấp nhất trong ngày. Ngân hàng chỉ niêm yết một giá bán thì hai cột bán ghi giống nhau.
     Số giờ nhỏ cạnh tên ngân hàng là lúc lấy được tỷ giá đó.
-    Ngân hàng chưa có số bấm "lấy số" để mở trang tỷ giá và nhập vào.
+    Hàng tô xám kèm nhãn ngày là số của ngày trước, chưa có số hôm nay — vẫn hiện để tham khảo nhưng không tính vào so sánh giá tốt nhất; bấm "cập nhật" để mở trang ngân hàng và nhập số mới.
     Nhãn "nguồn phụ" là số lấy từ dịch vụ tổng hợp bên ngoài do trang ngân hàng không đọc được — nên đối chiếu lại khi cần chính xác.
   </p>
   </div>
@@ -567,7 +571,8 @@
         <div class="chips" id="metricChips">
           <button class="chip" data-m="tm" aria-pressed="false">Mua tiền mặt</button>
           <button class="chip" data-m="ck" aria-pressed="true">Mua chuyển khoản</button>
-          <button class="chip" data-m="b" aria-pressed="false">Bán</button>
+          <button class="chip" data-m="bck" aria-pressed="false">Bán chuyển khoản</button>
+          <button class="chip" data-m="b" aria-pressed="false">Bán tiền mặt</button>
         </div>
       </div>
       <div class="ctrl-row">
@@ -632,7 +637,7 @@
       </div>
 
       <div class="grid labels">
-        <span>Loại</span><span>Mua TM</span><span>Mua CK</span><span>Bán</span>
+        <span>Loại</span><span>Mua TM</span><span>Mua CK</span><span>Bán CK</span><span>Bán TM</span>
       </div>
       <div id="entryRows"></div>
 
@@ -711,18 +716,21 @@
     const rowsData = BANKS.map((b) => {
       const bank = banks[b.code];
       const r = (bank && bank.rates && bank.rates[currency]) || null;
-      // Số của ngày cũ vẫn hiện để tham khảo, nhưng đánh dấu rõ và KHÔNG đưa
-      // vào so sánh "tốt nhất" — một con số cũ có thể chiếm mất dấu tô xanh
-      // và gây hiểu nhầm là ngân hàng đó đang có giá tốt nhất hôm nay.
       const stale = !!(r && today && bank && bank.date && bank.date !== today);
       return { bank: b, r, stale, date: bank && bank.date, at: bank && bank.updatedAt };
     });
 
-    const fresh = rowsData.filter((x) => x.r && !x.stale).map((x) => x.r);
+    // So sánh giá tốt nhất chỉ trong nhóm cùng mốc thời gian: nếu đã có số
+    // hôm nay thì chỉ so số hôm nay; nếu cả bảng còn là số hôm qua (sáng sớm,
+    // trước lần chạy đầu) thì so với nhau cho vẫn dùng được.
+    const hasFresh = rowsData.some((x) => x.r && !x.stale);
+    const fresh = rowsData.filter((x) => x.r && (hasFresh ? !x.stale : true)).map((x) => x.r);
     const ckVals  = fresh.map((r) => r.muaCk).filter((v) => v != null);
     const banVals = fresh.map((r) => r.ban).filter((v) => v != null);
-    const bestCk  = ckVals.length  ? Math.max(...ckVals)  : null;
-    const bestBan = banVals.length ? Math.min(...banVals) : null;
+    const banCkVals = fresh.map((r) => r.banCk).filter((v) => v != null);
+    const bestCk    = ckVals.length    ? Math.max(...ckVals)    : null;
+    const bestBan   = banVals.length   ? Math.min(...banVals)   : null;
+    const bestBanCk = banCkVals.length ? Math.min(...banCkVals) : null;
 
     if (sortBy !== "default") {
       const [field, dir] = sortBy.split("-");
@@ -737,7 +745,7 @@
     }
 
     const head = '<div class="row head">' +
-      '<span>Ngân hàng</span><span>Mua tiền mặt</span><span>Mua chuyển khoản</span><span>Bán</span>' +
+      '<span>Ngân hàng</span><span>Mua tiền mặt</span><span>Mua chuyển khoản</span><span>Bán chuyển khoản</span><span>Bán tiền mặt</span>' +
       '</div>';
 
     const dm = (iso) => {
@@ -758,24 +766,28 @@
           `<span class="bank">${b.name}` +
           `<a class="getlink" href="${b.url}" target="_blank" rel="noopener" data-fill="${b.code}">lấy số ↗</a>` +
           `</span>` +
-          '<span class="val none">—</span><span class="val none">—</span><span class="val none">—</span>' +
+          '<span class="val none">—</span><span class="val none">—</span><span class="val none">—</span><span class="val none">—</span>' +
           '</div>';
       }
 
+      // Số của ngày trước vẫn hiện để còn cái mà tham khảo (nhất là buổi sáng
+      // sớm, trước lần chạy đầu tiên trong ngày), nhưng tô xám và ghi rõ ngày
+      // để không đọc nhầm thành số hôm nay.
       let tag = "";
-      if (stale) tag = `<span class="tag old">số ${dm(date)}</span>`;
+      if (stale) tag = `<span class="tag old">số ngày ${dm(date)}</span>`;
       else if (r.src === "manual") tag = '<span class="tag">nhập tay</span>';
       // Số lấy từ API tổng hợp bên thứ ba (không phải trang ngân hàng) —
       // đánh dấu để người xem biết mà đối chiếu khi cần chính xác tuyệt đối.
       else if (r.src === "api") tag = '<span class="tag api">nguồn phụ</span>';
-
+      // Tỷ giá đổi nhiều lần trong ngày, nên giờ lấy số của từng ngân hàng
+      // quan trọng không kém con số.
       const clock = (!stale && at) ? `<span class="clock">${hhmm(at)}</span>` : "";
 
       const cell = (v, best) => {
         const t = money(v);
         if (t === null) return '<span class="val none">—</span>';
-        const isTop = !stale && best != null && v === best;
-        return `<span class="val${isTop ? " top" : ""}${stale ? " stale" : ""}">${t}</span>`;
+        const isTop = best != null && v === best;
+        return `<span class="val${isTop ? " top" : ""}">${t}</span>`;
       };
 
       const extra = stale
@@ -784,7 +796,7 @@
 
       return `<div class="row${stale ? " staleRow" : ""}">` +
         `<span class="bank">${b.name}${tag}${clock}${extra}</span>` +
-        cell(r.muaTm, null) + cell(r.muaCk, bestCk) + cell(r.ban, bestBan) +
+        cell(r.muaTm, null) + cell(r.muaCk, bestCk) + cell(r.banCk, bestBanCk) + cell(r.ban, bestBan) +
         '</div>';
     }).join("");
 
@@ -794,10 +806,14 @@
   function drawStamp() {
     if (!data || !data.updatedAt) { el("stamp").textContent = "Chưa có dữ liệu."; return; }
     const d = new Date(data.updatedAt);
-    const filled = BANKS.filter((b) => data.banks && data.banks[b.code]).length;
+    const td = data.date || null;
+    const filled = BANKS.filter((b) => {
+      const bk = data.banks && data.banks[b.code];
+      return bk && (!td || !bk.date || bk.date === td);
+    }).length;
     el("stamp").innerHTML =
       `Cập nhật <b>${d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</b>` +
-      ` &nbsp;·&nbsp; ${filled}/${BANKS.length} ngân hàng có số liệu`;
+      ` &nbsp;·&nbsp; ${filled}/${BANKS.length} ngân hàng có số hôm nay`;
   }
 
   function say(kind, text, autohide) {
@@ -809,15 +825,17 @@
 
   function drawNotice() {
     if (!data) return;
+    const today = data.date || null;
     const missing = BANKS.filter((b) => {
       const bank = data.banks && data.banks[b.code];
       if (!bank || !bank.rates) return true;
+      if (today && bank.date && bank.date !== today) return true;  // số của ngày cũ
       return !CURRENCIES.some((c) => bank.rates[c]);
     });
     if (missing.length) {
-      say("warn", `Chưa có số liệu: ${missing.map((b) => b.name).join(", ")}. Nhập tay ở cuối trang để bổ sung.`);
+      say("warn", `Chưa có số hôm nay: ${missing.map((b) => b.name).join(", ")} — các hàng này đang hiện số của ngày gần nhất, tô xám.`);
     } else {
-      say("ok", "Tất cả ngân hàng đã có số liệu.", true);
+      say("ok", "Tất cả ngân hàng đã có số hôm nay.", true);
     }
   }
 
@@ -868,7 +886,8 @@
     `<label for="m_${c}_muaTm">${c}</label>` +
     `<input type="number" inputmode="decimal" step="any" id="m_${c}_muaTm" aria-label="${c} mua tiền mặt" />` +
     `<input type="number" inputmode="decimal" step="any" id="m_${c}_muaCk" aria-label="${c} mua chuyển khoản" />` +
-    `<input type="number" inputmode="decimal" step="any" id="m_${c}_ban" aria-label="${c} bán" />` +
+    `<input type="number" inputmode="decimal" step="any" id="m_${c}_banCk" aria-label="${c} bán chuyển khoản" />` +
+    `<input type="number" inputmode="decimal" step="any" id="m_${c}_ban" aria-label="${c} bán tiền mặt" />` +
     '</div>'
   ).join("");
 
@@ -888,10 +907,10 @@
   // ==========================================================================
   // BIỂU ĐỒ THEO THỜI GIAN
   // Dữ liệu đọc từ nhánh /history/{ngoại tệ}/{ngày}/{mã NH} — nhánh này lưu
-  // gọn (chỉ 3 con số mỗi ngân hàng) nên tải nhanh kể cả 90 ngày.
+  // gọn (chỉ vài con số mỗi ngân hàng) nên tải nhanh kể cả 90 ngày.
   // ==========================================================================
   const LINE_COLORS = ["#1B4B73", "#0B7A5A", "#9A6208", "#7A3E9D", "#A32B22", "#0F7FA8", "#5C6B7A"];
-  const METRIC_LABEL = { tm: "Mua tiền mặt", ck: "Mua chuyển khoản", b: "Bán" };
+  const METRIC_LABEL = { tm: "Mua tiền mặt", ck: "Mua chuyển khoản", bck: "Bán chuyển khoản", b: "Bán tiền mặt" };
 
   let metric = "ck";
   let pickedBanks = ["STB"];   // mặc định: ngân hàng của mình
@@ -1100,13 +1119,17 @@
     for (const c of CURRENCIES) {
       const tm = parseFloat(el(`m_${c}_muaTm`).value);
       const ck = parseFloat(el(`m_${c}_muaCk`).value);
+      const bck = parseFloat(el(`m_${c}_banCk`).value);
       const bn = parseFloat(el(`m_${c}_ban`).value);
-      if (!isNaN(tm) || !isNaN(ck) || !isNaN(bn)) {
+      if (!isNaN(tm) || !isNaN(ck) || !isNaN(bck) || !isNaN(bn)) {
+        // Ngân hàng chỉ có một giá bán thì nhập một ô, ô kia tự lấy theo.
+        const banTm = isNaN(bn) ? (isNaN(bck) ? null : bck) : bn;
+        const banCk = isNaN(bck) ? (isNaN(bn) ? null : bn) : bck;
         rates[c] = {
           muaTm: isNaN(tm) ? null : tm,
           muaCk: isNaN(ck) ? null : ck,
-          ban:   isNaN(bn) ? null : bn,
-          banCk: null,
+          ban:   banTm,
+          banCk: banCk,
         };
       }
     }
@@ -1134,6 +1157,7 @@
         CURRENCIES.forEach((c) => {
           el(`m_${c}_muaTm`).value = "";
           el(`m_${c}_muaCk`).value = "";
+          el(`m_${c}_banCk`).value = "";
           el(`m_${c}_ban`).value = "";
         });
       }
