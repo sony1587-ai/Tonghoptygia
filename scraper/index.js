@@ -10,7 +10,7 @@ const admin = require("firebase-admin");
 const xml2js = require("xml2js");
 const puppeteer = require("puppeteer");
 
-const WANTED = ["USD", "EUR", "JPY", "THB", "GBP", "AUD"];
+const WANTED = ["USD", "EUR", "CAD", "THB", "GBP", "AUD"];
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -185,7 +185,7 @@ function toNumberGeneric(str) {
 const BANDS = {
   USD: [15000, 40000],
   EUR: [15000, 50000],
-  JPY: [80, 400],
+  CAD: [12000, 25000],
   THB: [300, 1500],
   GBP: [20000, 60000],
   AUD: [10000, 35000],
