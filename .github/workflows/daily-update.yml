@@ -2,10 +2,8 @@ name: Cập nhật tỷ giá hàng ngày
 
 on:
   schedule:
-    # Giờ UTC, Việt Nam = UTC+7. Thứ 2 đến thứ 7.
-    # 00:30 UTC = 7h30 sáng — lần chạy sớm để bảng có số ngay đầu giờ làm việc.
-    - cron: "30 0 * * 1-6"
-    # Sau đó cách 2 tiếng: 8h, 10h, 12h, 14h, 16h và chốt lần cuối lúc 17h.
+    # Giờ UTC, Việt Nam = UTC+7. Cách 2 tiếng/lần trong giờ làm việc,
+    # thứ 2 đến thứ 7: 8h, 10h, 12h, 14h, 16h và chốt lần cuối lúc 17h.
     - cron: "0 1,3,5,7,9,10 * * 1-6"
   workflow_dispatch: {}
     # ↑ Cho phép chạy thủ công: từ tab "Actions" trên GitHub (nút "Run workflow"),
