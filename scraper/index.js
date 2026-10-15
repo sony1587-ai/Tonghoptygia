@@ -10,7 +10,7 @@ const admin = require("firebase-admin");
 const xml2js = require("xml2js");
 const puppeteer = require("puppeteer");
 
-const WANTED = ["USD", "EUR", "CAD", "THB", "GBP", "AUD"];
+const WANTED = ["USD", "EUR", "JPY", "CAD", "THB", "GBP", "AUD", "NZD"];
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -88,11 +88,15 @@ async function scrapeVietcombank() {
     };
   }
 
-  const missing = WANTED.filter((c) => !result[c]);
-  if (missing.length) {
-    throw new Error(`Vietcombank: thiếu dữ liệu cho ${missing.join(", ")} — cấu trúc XML có thể đã đổi.`);
+    // Vietcombank không niêm yết đủ mọi ngoại tệ (vd NZD) — chỉ coi là lỗi khi
+  // thiếu USD (dấu hiệu cấu trúc XML đã đổi), loại nào thiếu thì bỏ qua.
+  if (!result.USD) {
+    throw new Error("Vietcombank: không thấy USD — cấu trúc XML có thể đã đổi.");
   }
+  const missing = WANTED.filter((c) => !result[c]);
+  if (missing.length) console.log(`   (Vietcombank không niêm yết: ${missing.join(", ")})`);
   return result;
+
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +193,9 @@ const BANDS = {
   THB: [300, 1500],
   GBP: [20000, 60000],
   AUD: [10000, 35000],
+    JPY: [80, 400],
+  NZD: [8000, 20000],
+
 };
 
 function inBand(code, v) {
